@@ -1,0 +1,6 @@
+{
+  "name": "Gestão Recanto da Paz",
+  "description": "Sistema completo para gestão de locação por temporada, controle financeiro, reformas e checklists operacionais da Chácara Recanto da Paz.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
