@@ -21,8 +21,11 @@ import {
   Layers,
   FileText,
   AlertTriangle,
+  Camera,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { ExpenseCategoryChart } from './ExpenseCategoryChart';
+import { PhotoLightboxModal } from './PhotoLightboxModal';
 
 interface ExpensesModuleProps {
   expenses: Expense[];
@@ -51,6 +54,36 @@ export const ExpensesModule: React.FC<ExpensesModuleProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+
+  // Lightbox state for zoom/photos inspection
+  const [lightboxState, setLightboxState] = useState<{
+    isOpen: boolean;
+    photos: string[];
+    initialIndex: number;
+    title: string;
+    subtitle: string;
+  }>({
+    isOpen: false,
+    photos: [],
+    initialIndex: 0,
+    title: '',
+    subtitle: '',
+  });
+
+  const handleOpenLightbox = (exp: Expense, initialIndex = 0) => {
+    if (!exp.photos || exp.photos.length === 0) return;
+    setLightboxState({
+      isOpen: true,
+      photos: exp.photos,
+      initialIndex,
+      title: exp.title,
+      subtitle: `${CATEGORY_LABELS[exp.category]?.label || exp.category} • ${exp.responsible_person}`,
+    });
+  };
+
+  const handleCloseLightbox = () => {
+    setLightboxState((prev) => ({ ...prev, isOpen: false }));
+  };
 
   // Summary figures
   const totalInvested = useMemo(() => expenses.reduce((acc, curr) => acc + (curr.cost || 0), 0), [expenses]);
@@ -259,7 +292,21 @@ export const ExpensesModule: React.FC<ExpensesModuleProps> = ({
                         {/* Descrição */}
                         <td className="py-3.5 px-4">
                           <div>
-                            <p className="font-bold text-slate-900 leading-snug">{exp.title}</p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="font-bold text-slate-900 leading-snug">{exp.title}</p>
+                              {exp.photos && exp.photos.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenLightbox(exp, 0)}
+                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 transition-colors cursor-pointer"
+                                  title="Ver fotos anexadas em tela cheia"
+                                >
+                                  <Camera className="w-3 h-3 text-emerald-700 shrink-0" />
+                                  <span>{exp.photos.length} {exp.photos.length === 1 ? 'foto' : 'fotos'}</span>
+                                </button>
+                              )}
+                            </div>
+
                             <div className="flex items-center space-x-2 mt-1">
                               <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${catConfig.bg} ${catConfig.color}`}>
                                 {catConfig.label}
@@ -270,10 +317,41 @@ export const ExpensesModule: React.FC<ExpensesModuleProps> = ({
                                 </span>
                               )}
                             </div>
+
                             {exp.notes && (
-                              <p className="text-[11px] text-slate-400 mt-1 line-clamp-1 italic">
+                              <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 italic">
                                 {exp.notes}
                               </p>
+                            )}
+
+                            {/* Miniaturas das fotos anexadas */}
+                            {exp.photos && exp.photos.length > 0 && (
+                              <div className="flex items-center gap-1.5 mt-2">
+                                {exp.photos.slice(0, 4).map((photo, pIdx) => {
+                                  const isLastAndMore = pIdx === 3 && exp.photos!.length > 4;
+                                  return (
+                                    <button
+                                      key={pIdx}
+                                      type="button"
+                                      onClick={() => handleOpenLightbox(exp, pIdx)}
+                                      className="relative w-11 h-11 rounded-md overflow-hidden border border-stone-300 hover:border-emerald-500 hover:scale-105 transition-all shadow-2xs group cursor-pointer shrink-0 bg-stone-100"
+                                      title={`Ampliar foto ${pIdx + 1} em tela cheia`}
+                                    >
+                                      <img
+                                        src={photo}
+                                        alt={`${exp.title} - Foto ${pIdx + 1}`}
+                                        className="w-full h-full object-cover"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      {isLastAndMore && (
+                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[11px] font-black">
+                                          +{exp.photos!.length - 3}
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
                         </td>
@@ -348,6 +426,16 @@ export const ExpensesModule: React.FC<ExpensesModuleProps> = ({
           )}
         </div>
       </div>
+
+      {/* Lightbox / Zoom em tela cheia das Fotos */}
+      <PhotoLightboxModal
+        isOpen={lightboxState.isOpen}
+        onClose={handleCloseLightbox}
+        photos={lightboxState.photos}
+        initialIndex={lightboxState.initialIndex}
+        title={lightboxState.title}
+        subtitle={lightboxState.subtitle}
+      />
     </div>
   );
 };

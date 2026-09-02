@@ -44,6 +44,7 @@ export interface Expense {
   status: ExpenseStatus;
   priority: ExpensePriority;
   receipt_url_or_ref?: string;
+  photos?: string[];
   notes?: string;
   created_at: string;
   updated_at: string;

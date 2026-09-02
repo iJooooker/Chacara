@@ -87,6 +87,10 @@ export const INITIAL_EXPENSES: Expense[] = [
     status: 'completed',
     priority: 'high',
     receipt_url_or_ref: 'NF-e 4492',
+    photos: [
+      'https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1572331165267-854da2b10ccc?auto=format&fit=crop&w=1000&q=80',
+    ],
     notes: 'Substituição por areia de vidro filtrante e 2 novos refletores LED RGB com controle remoto.',
     created_at: '2026-08-10T12:00:00.000Z',
     updated_at: '2026-08-10T12:00:00.000Z',
@@ -101,6 +105,9 @@ export const INITIAL_EXPENSES: Expense[] = [
     status: 'completed',
     priority: 'high',
     receipt_url_or_ref: 'Recibo Granito #104',
+    photos: [
+      'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1000&q=80',
+    ],
     notes: 'Instalação de granito Preto São Gabriel e nova manivela em inox para a churrasqueira.',
     created_at: '2026-08-18T16:00:00.000Z',
     updated_at: '2026-08-18T16:00:00.000Z',
@@ -129,6 +136,10 @@ export const INITIAL_EXPENSES: Expense[] = [
     status: 'completed',
     priority: 'high',
     receipt_url_or_ref: 'Nota Leroy Merlin',
+    photos: [
+      'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1000&q=80',
+    ],
     notes: 'Troca de fiação de 6mm na suíte máster e 2 chuveiros Lorenzetti blindados.',
     created_at: '2026-08-29T10:00:00.000Z',
     updated_at: '2026-08-29T10:00:00.000Z',

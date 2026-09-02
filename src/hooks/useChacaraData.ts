@@ -75,6 +75,31 @@ export function useChacaraData() {
     refreshFromSupabase();
   }, [refreshFromSupabase]);
 
+  // Keep localStorage in sync with current states
+  useEffect(() => {
+    try {
+      localStorage.setItem('recanto_paz_expenses', JSON.stringify(expenses));
+    } catch (e) {
+      console.error('Error saving expenses to localStorage:', e);
+    }
+  }, [expenses]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('recanto_paz_reservations', JSON.stringify(reservations));
+    } catch (e) {
+      console.error('Error saving reservations to localStorage:', e);
+    }
+  }, [reservations]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('recanto_paz_checklists', JSON.stringify(checklists));
+    } catch (e) {
+      console.error('Error saving checklists to localStorage:', e);
+    }
+  }, [checklists]);
+
   // ==========================================
   // RESERVATION ACTIONS
   // ==========================================
