@@ -8,7 +8,8 @@ import { Hammer, User, DollarSign, Calendar, FileText, AlertCircle, Camera, X, L
 interface ExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: Omit<Expense, 'id' | 'created_at' | 'updated_at'>) => void;
+  onSave?: (data: any) => void;
+  onSaveExpense?: (data: any) => void;
   initialData?: Expense | null;
 }
 
@@ -16,11 +17,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onSaveExpense,
   initialData,
 }) => {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('piscina');
-  const [cost, setCost] = useState<number>(500);
+  const [cost, setCost] = useState<string | number>('350');
   const [responsiblePerson, setResponsiblePerson] = useState('');
   const [date, setDate] = useState('');
   const [status, setStatus] = useState<ExpenseStatus>('completed');
@@ -37,7 +39,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     if (initialData) {
       setTitle(initialData.title || '');
       setCategory(initialData.category || 'piscina');
-      setCost(initialData.cost || 0);
+      setCost(initialData.cost !== undefined ? String(initialData.cost) : '0');
       setResponsiblePerson(initialData.responsible_person || '');
       setDate(initialData.date || '');
       setStatus(initialData.status || 'completed');
@@ -49,7 +51,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       const today = new Date().toISOString().split('T')[0];
       setTitle('');
       setCategory('piscina');
-      setCost(350);
+      setCost('350');
       setResponsiblePerson('');
       setDate(today);
       setStatus('completed');
@@ -93,35 +95,35 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      setErrorMessage('Informe a descrição ou nome da reforma/despesa.');
-      return;
-    }
-    if (!responsiblePerson.trim()) {
-      setErrorMessage('Informe o prestador ou responsável pela despesa.');
-      return;
-    }
-    if (!date) {
-      setErrorMessage('Informe a data do gasto ou previsão.');
-      return;
-    }
-    if (cost <= 0) {
-      setErrorMessage('O valor da despesa deve ser maior que zero.');
+    setErrorMessage('');
+
+    if (!title?.trim()) {
+      setErrorMessage('Por favor, preencha a descrição/título da despesa.');
       return;
     }
 
-    onSave({
+    const numericCost = parseFloat(String(cost).replace(',', '.')) || 0;
+
+    const newExpense = {
+      id: initialData?.id || 'exp-' + Date.now(),
       title: title.trim(),
-      category,
-      cost: Number(cost),
-      responsible_person: responsiblePerson.trim(),
-      date,
-      status,
-      priority,
-      receipt_url_or_ref: receiptUrlOrRef.trim() || undefined,
-      photos: photos.length > 0 ? photos : undefined,
-      notes: notes.trim() || undefined,
-    });
+      category: category || 'outros',
+      cost: numericCost,
+      responsible_person: responsiblePerson?.trim() || 'Não informado',
+      date: date || new Date().toISOString().split('T')[0],
+      status: status || 'planned',
+      priority: priority || 'medium',
+      receipt_url_or_ref: receiptUrlOrRef?.trim() || '',
+      notes: notes?.trim() || '',
+      photos: photos || [],
+      created_at: initialData?.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const saveFunction = onSaveExpense || onSave;
+    if (saveFunction) {
+      saveFunction(newExpense);
+    }
     onClose();
   };
 
@@ -133,7 +135,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       subtitle="Chácara Recanto da Paz • Gestão de custos e melhorias"
       maxWidth="2xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {errorMessage && (
           <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-center">
             <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
@@ -148,10 +150,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
           <input
             id="input-exp-title"
             type="text"
-            required
             placeholder="Ex: Reforma da bomba d'água da piscina e troca de conexões"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              if (errorMessage) setErrorMessage('');
+            }}
             className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-sans"
           />
         </div>
@@ -177,29 +181,30 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Valor Total do Gasto (R$) *
+              Valor Total do Gasto (R$)
             </label>
             <input
               id="input-exp-cost"
-              type="number"
-              min="0"
-              step="10"
-              required
+              type="text"
+              inputMode="decimal"
+              placeholder="Ex: 350 ou 350,00"
               value={cost}
-              onChange={(e) => setCost(Number(e.target.value))}
+              onChange={(e) => {
+                setCost(e.target.value);
+                if (errorMessage) setErrorMessage('');
+              }}
               className="w-full px-3 py-2 text-sm font-bold text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Prestador / Responsável *
+              Prestador / Responsável
             </label>
             <input
               id="input-exp-responsible"
               type="text"
-              required
-              placeholder="Ex: Pedreiro Marcos / Eletricista Rogério"
+              placeholder="Ex: Pedreiro Marcos (ou Não informado)"
               value={responsiblePerson}
               onChange={(e) => setResponsiblePerson(e.target.value)}
               className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-sans"
@@ -208,12 +213,11 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Data do Gasto / Execução *
+              Data do Gasto / Execução
             </label>
             <input
               id="input-exp-date"
               type="date"
-              required
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-sans"

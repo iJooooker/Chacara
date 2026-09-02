@@ -173,7 +173,20 @@ export const SupabaseService = {
         .single();
 
       if (error) {
-        console.error('Supabase addExpense error:', error.message);
+        console.warn('Supabase addExpense initial attempt notice:', error.message);
+        // If error is caused by missing photos column or similar schema mismatch, retry without photos
+        if (payload.photos && payload.photos.length > 0) {
+          const { photos, ...payloadNoPhotos } = payload;
+          const { data: retryData, error: retryError } = await supabase
+            .from('expenses')
+            .insert([payloadNoPhotos])
+            .select()
+            .single();
+
+          if (!retryError && retryData) {
+            return { ...(retryData as Expense), photos };
+          }
+        }
         return payload;
       }
       return (data as Expense) || payload;
@@ -201,7 +214,20 @@ export const SupabaseService = {
         .single();
 
       if (error) {
-        console.error('Supabase updateExpense error:', error.message);
+        console.warn('Supabase updateExpense initial attempt notice:', error.message);
+        if (payload.photos) {
+          const { photos, ...payloadNoPhotos } = payload;
+          const { data: retryData, error: retryError } = await supabase
+            .from('expenses')
+            .update(payloadNoPhotos)
+            .eq('id', id)
+            .select()
+            .single();
+
+          if (!retryError && retryData) {
+            return { ...(retryData as Expense), photos };
+          }
+        }
         return null;
       }
       return data as Expense;

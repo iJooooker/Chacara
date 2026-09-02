@@ -20,9 +20,9 @@ export async function processImageFile(file: File): Promise<string> {
 
       const img = new Image();
       img.onload = () => {
-        // Limit max dimensions to 1280px to prevent large storage usage while keeping high fidelity
-        const MAX_WIDTH = 1280;
-        const MAX_HEIGHT = 1280;
+        // Limit max dimensions to 1024px to prevent large storage usage while keeping high fidelity
+        const MAX_WIDTH = 1024;
+        const MAX_HEIGHT = 1024;
         let width = img.width;
         let height = img.height;
 
@@ -53,8 +53,8 @@ export async function processImageFile(file: File): Promise<string> {
           ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Compress to JPEG with 0.8 quality
-          const compressed = canvas.toDataURL('image/jpeg', 0.8);
+          // Compress to JPEG with 0.72 quality for fast, reliable storage
+          const compressed = canvas.toDataURL('image/jpeg', 0.72);
           resolve(compressed);
         } catch {
           // If canvas fails, fallback to original data URL

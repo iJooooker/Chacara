@@ -246,6 +246,7 @@ export default function App() {
         isOpen={isExpenseModalOpen}
         onClose={() => setIsExpenseModalOpen(false)}
         onSave={handleSaveExpense}
+        onSaveExpense={handleSaveExpense}
         initialData={editingExpense}
       />
 
