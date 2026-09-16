@@ -115,7 +115,9 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       return;
     }
 
+    const daysStay = calculateDaysBetween(checkIn, checkOut);
     const calculatedRemaining = Math.max(0, totalAmount - amountPaid);
+    const calculatedDailyRate = daysStay > 0 ? Math.round(Number(totalAmount) / daysStay) : Number(totalAmount);
 
     onSave({
       client_name: clientName.trim(),
@@ -124,6 +126,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       check_in: checkIn,
       check_out: checkOut,
       guests_count: Number(guestsCount) || 1,
+      daily_rate: calculatedDailyRate,
       total_amount: Number(totalAmount) || 0,
       amount_paid: Number(amountPaid) || 0,
       remaining_amount: calculatedRemaining,
@@ -145,7 +148,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       subtitle="Chácara Recanto da Paz • Registro e contrato de locação"
       maxWidth="3xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
         {errorMessage && (
           <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-center">
             <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
