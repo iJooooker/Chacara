@@ -27,13 +27,12 @@ export const StorageService = {
     try {
       const data = localStorage.getItem(KEYS.RESERVATIONS);
       if (!data) {
-        localStorage.setItem(KEYS.RESERVATIONS, JSON.stringify(INITIAL_RESERVATIONS));
-        return INITIAL_RESERVATIONS;
+        return [];
       }
       return JSON.parse(data);
     } catch (e) {
       console.error('Error loading reservations:', e);
-      return INITIAL_RESERVATIONS;
+      return [];
     }
   },
 
@@ -86,13 +85,12 @@ export const StorageService = {
     try {
       const data = localStorage.getItem(KEYS.EXPENSES);
       if (!data) {
-        localStorage.setItem(KEYS.EXPENSES, JSON.stringify(INITIAL_EXPENSES));
-        return INITIAL_EXPENSES;
+        return [];
       }
       return JSON.parse(data);
     } catch (e) {
       console.error('Error loading expenses:', e);
-      return INITIAL_EXPENSES;
+      return [];
     }
   },
 
@@ -145,13 +143,12 @@ export const StorageService = {
     try {
       const data = localStorage.getItem(KEYS.CHECKLISTS);
       if (!data) {
-        localStorage.setItem(KEYS.CHECKLISTS, JSON.stringify(INITIAL_CHECKLISTS));
-        return INITIAL_CHECKLISTS;
+        return [];
       }
       return JSON.parse(data);
     } catch (e) {
       console.error('Error loading checklists:', e);
-      return INITIAL_CHECKLISTS;
+      return [];
     }
   },
 

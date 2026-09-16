@@ -80,64 +80,15 @@ export const SupabaseService = {
         .order('check_in', { ascending: true });
 
       if (error) {
-        console.warn('Supabase getReservations notice:', error.message);
+        console.warn('Supabase getReservations notice, using local cache:', error.message);
         return StorageService.getReservations();
       }
 
-      const local = StorageService.getReservations();
-
-      if (data && data.length > 0) {
-        // Also check if user has created any reservations locally that haven't been pushed to Supabase
-        const missingInRemote = local.filter(
-          (loc) =>
-            !data.some(
-              (db) =>
-                db.id === loc.id ||
-                (db.client_name === loc.client_name && db.check_in === loc.check_in)
-            )
-        );
-
-        if (missingInRemote.length > 0) {
-          try {
-            const toInsert = missingInRemote.map((r) => sanitizeReservationForDb(r));
-            const { data: synced } = await supabase
-              .from('reservations')
-              .insert(toInsert)
-              .select();
-
-            if (synced && synced.length > 0) {
-              const merged = [...(data as Reservation[]), ...(synced as Reservation[])];
-              StorageService.saveReservations(merged);
-              return merged;
-            }
-          } catch (e) {
-            console.warn('Auto-sync missing reservations notice:', e);
-          }
-        }
-
-        StorageService.saveReservations(data as Reservation[]);
-        return data as Reservation[];
-      }
-
-      // If remote table is currently empty, push existing local reservations up to Supabase
-      if (local && local.length > 0) {
-        try {
-          const toInsert = local.map((r) => sanitizeReservationForDb(r));
-          const { data: upserted } = await supabase
-            .from('reservations')
-            .upsert(toInsert)
-            .select();
-
-          if (upserted && upserted.length > 0) {
-            StorageService.saveReservations(upserted as Reservation[]);
-            return upserted as Reservation[];
-          }
-        } catch (syncErr) {
-          console.warn('Auto-sync initial reservations notice:', syncErr);
-        }
-      }
-
-      return local;
+      // Supabase is the single authoritative source of truth.
+      // Whatever data exists remotely (including an empty list) is the true state.
+      const remoteReservations = (data || []) as Reservation[];
+      StorageService.saveReservations(remoteReservations);
+      return remoteReservations;
     } catch (err: any) {
       console.warn('Supabase getReservations unavailable, using local storage:', err?.message || err);
       return StorageService.getReservations();
@@ -299,12 +250,9 @@ export const SupabaseService = {
         return StorageService.getExpenses();
       }
 
-      if (data && data.length > 0) {
-        StorageService.saveExpenses(data as Expense[]);
-        return data as Expense[];
-      }
-
-      return StorageService.getExpenses();
+      const remoteExpenses = (data || []) as Expense[];
+      StorageService.saveExpenses(remoteExpenses);
+      return remoteExpenses;
     } catch (err: any) {
       console.warn('Supabase getExpenses unavailable, using local storage:', err?.message || err);
       return StorageService.getExpenses();
@@ -419,12 +367,9 @@ export const SupabaseService = {
         return StorageService.getChecklists();
       }
 
-      if (data && data.length > 0) {
-        StorageService.saveChecklists(data as Checklist[]);
-        return data as Checklist[];
-      }
-
-      return StorageService.getChecklists();
+      const remoteChecklists = (data || []) as Checklist[];
+      StorageService.saveChecklists(remoteChecklists);
+      return remoteChecklists;
     } catch (err: any) {
       console.warn('Supabase getChecklists unavailable, using local storage:', err?.message || err);
       return StorageService.getChecklists();

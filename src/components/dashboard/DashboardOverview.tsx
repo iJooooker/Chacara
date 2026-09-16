@@ -114,10 +114,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <span>Painel Executivo da Chácara</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            Gestão Recanto da Paz
+            {settings.name || 'Gestão da Chácara'}
           </h2>
           <p className="text-slate-400 text-xs sm:text-sm mt-0.5 max-w-2xl">
-            Locações por temporada, prestação de contas com o sócio/proprietário e manutenção da chácara.
+            {settings.subtitle || 'Locações por temporada, prestação de contas com o sócio e manutenção da chácara.'}
           </p>
         </div>
 

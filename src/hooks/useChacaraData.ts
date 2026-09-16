@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Reservation, Expense, Checklist, ChacaraDetails } from '../types';
 import { SupabaseService } from '../services/supabaseService';
+import { supabase } from '../services/supabaseClient';
 import {
-  INITIAL_RESERVATIONS,
-  INITIAL_EXPENSES,
-  INITIAL_CHECKLISTS,
   INITIAL_CHACARA_DETAILS,
 } from '../services/mockData';
 
@@ -12,27 +10,27 @@ export function useChacaraData() {
   const [reservations, setReservations] = useState<Reservation[]>(() => {
     try {
       const cached = localStorage.getItem('recanto_paz_reservations');
-      return cached ? JSON.parse(cached) : INITIAL_RESERVATIONS;
+      return cached ? JSON.parse(cached) : [];
     } catch {
-      return INITIAL_RESERVATIONS;
+      return [];
     }
   });
 
   const [expenses, setExpenses] = useState<Expense[]>(() => {
     try {
       const cached = localStorage.getItem('recanto_paz_expenses');
-      return cached ? JSON.parse(cached) : INITIAL_EXPENSES;
+      return cached ? JSON.parse(cached) : [];
     } catch {
-      return INITIAL_EXPENSES;
+      return [];
     }
   });
 
   const [checklists, setChecklists] = useState<Checklist[]>(() => {
     try {
       const cached = localStorage.getItem('recanto_paz_checklists');
-      return cached ? JSON.parse(cached) : INITIAL_CHECKLISTS;
+      return cached ? JSON.parse(cached) : [];
     } catch {
-      return INITIAL_CHECKLISTS;
+      return [];
     }
   });
 
@@ -71,8 +69,136 @@ export function useChacaraData() {
     }
   }, []);
 
+  // Fetch immediately on mount & setup Realtime listeners
   useEffect(() => {
     refreshFromSupabase();
+
+    if (!supabase) return;
+
+    // Realtime channel for instant multi-device synchronization
+    const channel = supabase
+      .channel('chacara_sync_channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reservations' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newRes = payload.new as Reservation;
+            setReservations((prev) => {
+              if (prev.some((r) => r.id === newRes.id)) {
+                return prev.map((r) => (r.id === newRes.id ? newRes : r));
+              }
+              return [newRes, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRes = payload.new as Reservation;
+            setReservations((prev) =>
+              prev.map((r) => (r.id === updatedRes.id ? updatedRes : r))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const deletedId = (payload.old as { id?: string })?.id;
+            if (deletedId) {
+              setReservations((prev) => prev.filter((r) => r.id !== deletedId));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'expenses' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newExp = payload.new as Expense;
+            setExpenses((prev) => {
+              if (prev.some((e) => e.id === newExp.id)) {
+                return prev.map((e) => (e.id === newExp.id ? newExp : e));
+              }
+              return [newExp, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedExp = payload.new as Expense;
+            setExpenses((prev) =>
+              prev.map((e) => (e.id === updatedExp.id ? updatedExp : e))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const deletedId = (payload.old as { id?: string })?.id;
+            if (deletedId) {
+              setExpenses((prev) => prev.filter((e) => e.id !== deletedId));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'checklists' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newChk = payload.new as Checklist;
+            setChecklists((prev) => {
+              if (prev.some((c) => c.id === newChk.id)) {
+                return prev.map((c) => (c.id === newChk.id ? newChk : c));
+              }
+              return [newChk, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedChk = payload.new as Checklist;
+            setChecklists((prev) =>
+              prev.map((c) => (c.id === updatedChk.id ? updatedChk : c))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const deletedId = (payload.old as { id?: string })?.id;
+            if (deletedId) {
+              setChecklists((prev) => prev.filter((c) => c.id !== deletedId));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chacara_details' },
+        (payload) => {
+          if (payload.new) {
+            const data = payload.new as any;
+            setSettings({
+              name: data.name,
+              subtitle: data.subtitle,
+              location: data.location,
+              max_guests: data.max_guests,
+              check_in_time: data.check_in_time,
+              check_out_time: data.check_out_time,
+              wifi_network: data.wifi_network,
+              wifi_password: data.wifi_password,
+              energy_110_220: data.energy_110_220,
+              gate_code: data.gate_code,
+              caretaker_name: data.caretaker_name,
+              caretaker_phone: data.caretaker_phone,
+              quiet_hours: data.quiet_hours,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshFromSupabase]);
+
+  // Re-sync whenever user brings the app into view (tab switch or mobile screen wake)
+  useEffect(() => {
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshFromSupabase();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleFocusOrVisible);
+    window.addEventListener('focus', handleFocusOrVisible);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleFocusOrVisible);
+      window.removeEventListener('focus', handleFocusOrVisible);
+    };
   }, [refreshFromSupabase]);
 
   // Keep localStorage in sync with current states
