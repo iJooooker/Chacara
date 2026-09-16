@@ -1,5 +1,6 @@
-import { supabase } from './supabaseClient';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Reservation, Expense, Checklist, ChacaraDetails } from '../types';
+import { StorageService } from './storage';
 import {
   INITIAL_RESERVATIONS,
   INITIAL_EXPENSES,
@@ -12,6 +13,10 @@ export const SupabaseService = {
   // RESERVATIONS
   // ==========================================
   async getReservations(): Promise<Reservation[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      return StorageService.getReservations();
+    }
+
     try {
       const { data, error } = await supabase
         .from('reservations')
@@ -19,57 +24,48 @@ export const SupabaseService = {
         .order('check_in', { ascending: true });
 
       if (error) {
-        console.error('Supabase getReservations error:', error.message);
-        const local = localStorage.getItem('recanto_paz_reservations');
-        return local ? JSON.parse(local) : INITIAL_RESERVATIONS;
+        console.warn('Supabase getReservations notice:', error.message);
+        return StorageService.getReservations();
       }
 
       if (data && data.length > 0) {
-        localStorage.setItem('recanto_paz_reservations', JSON.stringify(data));
+        StorageService.saveReservations(data as Reservation[]);
         return data as Reservation[];
       }
 
-      // If database is empty, return local or mock
-      const local = localStorage.getItem('recanto_paz_reservations');
-      return local ? JSON.parse(local) : INITIAL_RESERVATIONS;
-    } catch (err) {
-      console.error('Failed to fetch reservations from Supabase:', err);
-      const local = localStorage.getItem('recanto_paz_reservations');
-      return local ? JSON.parse(local) : INITIAL_RESERVATIONS;
+      return StorageService.getReservations();
+    } catch (err: any) {
+      console.warn('Supabase getReservations unavailable, using local storage:', err?.message || err);
+      return StorageService.getReservations();
     }
   },
 
   async addReservation(
     reservation: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>
   ): Promise<Reservation> {
-    const newId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `res-${Date.now()}`;
-    const now = new Date().toISOString();
+    const localSaved = StorageService.addReservation(reservation);
 
-    const payload: Reservation = {
-      ...reservation,
-      id: newId,
-      created_at: now,
-      updated_at: now,
-    };
+    if (!isSupabaseConfigured || !supabase) {
+      return localSaved;
+    }
 
     try {
       const { data, error } = await supabase
         .from('reservations')
-        .insert([payload])
+        .insert([localSaved])
         .select()
         .single();
 
-      if (error) {
-        console.error('Supabase addReservation error:', error.message);
-        return payload;
+      if (!error && data) {
+        return data as Reservation;
       }
-      return (data as Reservation) || payload;
-    } catch (err) {
-      console.error('Failed to insert reservation into Supabase:', err);
-      return payload;
+      if (error) {
+        console.warn('Supabase addReservation notice:', error.message);
+      }
+      return localSaved;
+    } catch (err: any) {
+      console.warn('Supabase addReservation notice:', err?.message || err);
+      return localSaved;
     }
   },
 
@@ -77,12 +73,18 @@ export const SupabaseService = {
     id: string,
     updates: Partial<Reservation>
   ): Promise<Reservation | null> {
-    const payload = {
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
+    const localUpdated = StorageService.updateReservation(id, updates);
+
+    if (!isSupabaseConfigured || !supabase) {
+      return localUpdated;
+    }
 
     try {
+      const payload = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+
       const { data, error } = await supabase
         .from('reservations')
         .update(payload)
@@ -90,18 +92,26 @@ export const SupabaseService = {
         .select()
         .single();
 
-      if (error) {
-        console.error('Supabase updateReservation error:', error.message);
-        return null;
+      if (!error && data) {
+        return data as Reservation;
       }
-      return data as Reservation;
-    } catch (err) {
-      console.error('Failed to update reservation in Supabase:', err);
-      return null;
+      if (error) {
+        console.warn('Supabase updateReservation notice:', error.message);
+      }
+      return localUpdated;
+    } catch (err: any) {
+      console.warn('Supabase updateReservation notice:', err?.message || err);
+      return localUpdated;
     }
   },
 
   async deleteReservation(id: string): Promise<boolean> {
+    StorageService.deleteReservation(id);
+
+    if (!isSupabaseConfigured || !supabase) {
+      return true;
+    }
+
     try {
       const { error } = await supabase
         .from('reservations')
@@ -109,13 +119,12 @@ export const SupabaseService = {
         .eq('id', id);
 
       if (error) {
-        console.error('Supabase deleteReservation error:', error.message);
-        return false;
+        console.warn('Supabase deleteReservation notice:', error.message);
       }
       return true;
-    } catch (err) {
-      console.error('Failed to delete reservation from Supabase:', err);
-      return false;
+    } catch (err: any) {
+      console.warn('Supabase deleteReservation notice:', err?.message || err);
+      return true;
     }
   },
 
@@ -123,6 +132,10 @@ export const SupabaseService = {
   // EXPENSES
   // ==========================================
   async getExpenses(): Promise<Expense[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      return StorageService.getExpenses();
+    }
+
     try {
       const { data, error } = await supabase
         .from('expenses')
@@ -130,53 +143,42 @@ export const SupabaseService = {
         .order('date', { ascending: false });
 
       if (error) {
-        console.error('Supabase getExpenses error:', error.message);
-        const local = localStorage.getItem('recanto_paz_expenses');
-        return local ? JSON.parse(local) : INITIAL_EXPENSES;
+        console.warn('Supabase getExpenses notice:', error.message);
+        return StorageService.getExpenses();
       }
 
       if (data && data.length > 0) {
-        localStorage.setItem('recanto_paz_expenses', JSON.stringify(data));
+        StorageService.saveExpenses(data as Expense[]);
         return data as Expense[];
       }
 
-      const local = localStorage.getItem('recanto_paz_expenses');
-      return local ? JSON.parse(local) : INITIAL_EXPENSES;
-    } catch (err) {
-      console.error('Failed to fetch expenses from Supabase:', err);
-      const local = localStorage.getItem('recanto_paz_expenses');
-      return local ? JSON.parse(local) : INITIAL_EXPENSES;
+      return StorageService.getExpenses();
+    } catch (err: any) {
+      console.warn('Supabase getExpenses unavailable, using local storage:', err?.message || err);
+      return StorageService.getExpenses();
     }
   },
 
   async addExpense(
     expense: Omit<Expense, 'id' | 'created_at' | 'updated_at'>
   ): Promise<Expense> {
-    const newId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `exp-${Date.now()}`;
-    const now = new Date().toISOString();
+    const localSaved = StorageService.addExpense(expense);
 
-    const payload: Expense = {
-      ...expense,
-      id: newId,
-      created_at: now,
-      updated_at: now,
-    };
+    if (!isSupabaseConfigured || !supabase) {
+      return localSaved;
+    }
 
     try {
       const { data, error } = await supabase
         .from('expenses')
-        .insert([payload])
+        .insert([localSaved])
         .select()
         .single();
 
       if (error) {
-        console.warn('Supabase addExpense initial attempt notice:', error.message);
-        // If error is caused by missing photos column or similar schema mismatch, retry without photos
-        if (payload.photos && payload.photos.length > 0) {
-          const { photos, ...payloadNoPhotos } = payload;
+        // If photos column isn't present in remote schema, retry without photos
+        if (localSaved.photos && localSaved.photos.length > 0) {
+          const { photos, ...payloadNoPhotos } = localSaved;
           const { data: retryData, error: retryError } = await supabase
             .from('expenses')
             .insert([payloadNoPhotos])
@@ -187,12 +189,13 @@ export const SupabaseService = {
             return { ...(retryData as Expense), photos };
           }
         }
-        return payload;
+        console.warn('Supabase addExpense notice:', error.message);
+        return localSaved;
       }
-      return (data as Expense) || payload;
-    } catch (err) {
-      console.error('Failed to insert expense into Supabase:', err);
-      return payload;
+      return (data as Expense) || localSaved;
+    } catch (err: any) {
+      console.warn('Supabase addExpense notice:', err?.message || err);
+      return localSaved;
     }
   },
 
@@ -200,12 +203,18 @@ export const SupabaseService = {
     id: string,
     updates: Partial<Expense>
   ): Promise<Expense | null> {
-    const payload = {
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
+    const localUpdated = StorageService.updateExpense(id, updates);
+
+    if (!isSupabaseConfigured || !supabase) {
+      return localUpdated;
+    }
 
     try {
+      const payload = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+
       const { data, error } = await supabase
         .from('expenses')
         .update(payload)
@@ -214,7 +223,6 @@ export const SupabaseService = {
         .single();
 
       if (error) {
-        console.warn('Supabase updateExpense initial attempt notice:', error.message);
         if (payload.photos) {
           const { photos, ...payloadNoPhotos } = payload;
           const { data: retryData, error: retryError } = await supabase
@@ -228,27 +236,32 @@ export const SupabaseService = {
             return { ...(retryData as Expense), photos };
           }
         }
-        return null;
+        console.warn('Supabase updateExpense notice:', error.message);
+        return localUpdated;
       }
-      return data as Expense;
-    } catch (err) {
-      console.error('Failed to update expense in Supabase:', err);
-      return null;
+      return (data as Expense) || localUpdated;
+    } catch (err: any) {
+      console.warn('Supabase updateExpense notice:', err?.message || err);
+      return localUpdated;
     }
   },
 
   async deleteExpense(id: string): Promise<boolean> {
+    StorageService.deleteExpense(id);
+
+    if (!isSupabaseConfigured || !supabase) {
+      return true;
+    }
+
     try {
       const { error } = await supabase.from('expenses').delete().eq('id', id);
-
       if (error) {
-        console.error('Supabase deleteExpense error:', error.message);
-        return false;
+        console.warn('Supabase deleteExpense notice:', error.message);
       }
       return true;
-    } catch (err) {
-      console.error('Failed to delete expense from Supabase:', err);
-      return false;
+    } catch (err: any) {
+      console.warn('Supabase deleteExpense notice:', err?.message || err);
+      return true;
     }
   },
 
@@ -256,6 +269,10 @@ export const SupabaseService = {
   // CHECKLISTS
   // ==========================================
   async getChecklists(): Promise<Checklist[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      return StorageService.getChecklists();
+    }
+
     try {
       const { data, error } = await supabase
         .from('checklists')
@@ -263,56 +280,48 @@ export const SupabaseService = {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Supabase getChecklists error:', error.message);
-        const local = localStorage.getItem('recanto_paz_checklists');
-        return local ? JSON.parse(local) : INITIAL_CHECKLISTS;
+        console.warn('Supabase getChecklists notice:', error.message);
+        return StorageService.getChecklists();
       }
 
       if (data && data.length > 0) {
-        localStorage.setItem('recanto_paz_checklists', JSON.stringify(data));
+        StorageService.saveChecklists(data as Checklist[]);
         return data as Checklist[];
       }
 
-      const local = localStorage.getItem('recanto_paz_checklists');
-      return local ? JSON.parse(local) : INITIAL_CHECKLISTS;
-    } catch (err) {
-      console.error('Failed to fetch checklists from Supabase:', err);
-      const local = localStorage.getItem('recanto_paz_checklists');
-      return local ? JSON.parse(local) : INITIAL_CHECKLISTS;
+      return StorageService.getChecklists();
+    } catch (err: any) {
+      console.warn('Supabase getChecklists unavailable, using local storage:', err?.message || err);
+      return StorageService.getChecklists();
     }
   },
 
   async addChecklist(
     checklist: Omit<Checklist, 'id' | 'created_at' | 'updated_at'>
   ): Promise<Checklist> {
-    const newId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `chk-${Date.now()}`;
-    const now = new Date().toISOString();
+    const localSaved = StorageService.addChecklist(checklist);
 
-    const payload: Checklist = {
-      ...checklist,
-      id: newId,
-      created_at: now,
-      updated_at: now,
-    };
+    if (!isSupabaseConfigured || !supabase) {
+      return localSaved;
+    }
 
     try {
       const { data, error } = await supabase
         .from('checklists')
-        .insert([payload])
+        .insert([localSaved])
         .select()
         .single();
 
-      if (error) {
-        console.error('Supabase addChecklist error:', error.message);
-        return payload;
+      if (!error && data) {
+        return data as Checklist;
       }
-      return (data as Checklist) || payload;
-    } catch (err) {
-      console.error('Failed to insert checklist into Supabase:', err);
-      return payload;
+      if (error) {
+        console.warn('Supabase addChecklist notice:', error.message);
+      }
+      return localSaved;
+    } catch (err: any) {
+      console.warn('Supabase addChecklist notice:', err?.message || err);
+      return localSaved;
     }
   },
 
@@ -320,12 +329,18 @@ export const SupabaseService = {
     id: string,
     updates: Partial<Checklist>
   ): Promise<Checklist | null> {
-    const payload = {
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
+    const localUpdated = StorageService.updateChecklist(id, updates);
+
+    if (!isSupabaseConfigured || !supabase) {
+      return localUpdated;
+    }
 
     try {
+      const payload = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+
       const { data, error } = await supabase
         .from('checklists')
         .update(payload)
@@ -333,29 +348,35 @@ export const SupabaseService = {
         .select()
         .single();
 
-      if (error) {
-        console.error('Supabase updateChecklist error:', error.message);
-        return null;
+      if (!error && data) {
+        return data as Checklist;
       }
-      return data as Checklist;
-    } catch (err) {
-      console.error('Failed to update checklist in Supabase:', err);
-      return null;
+      if (error) {
+        console.warn('Supabase updateChecklist notice:', error.message);
+      }
+      return localUpdated;
+    } catch (err: any) {
+      console.warn('Supabase updateChecklist notice:', err?.message || err);
+      return localUpdated;
     }
   },
 
   async deleteChecklist(id: string): Promise<boolean> {
+    StorageService.deleteChecklist(id);
+
+    if (!isSupabaseConfigured || !supabase) {
+      return true;
+    }
+
     try {
       const { error } = await supabase.from('checklists').delete().eq('id', id);
-
       if (error) {
-        console.error('Supabase deleteChecklist error:', error.message);
-        return false;
+        console.warn('Supabase deleteChecklist notice:', error.message);
       }
       return true;
-    } catch (err) {
-      console.error('Failed to delete checklist from Supabase:', err);
-      return false;
+    } catch (err: any) {
+      console.warn('Supabase deleteChecklist notice:', err?.message || err);
+      return true;
     }
   },
 
@@ -363,6 +384,10 @@ export const SupabaseService = {
   // CHACARA DETAILS (SETTINGS)
   // ==========================================
   async getSettings(): Promise<ChacaraDetails> {
+    if (!isSupabaseConfigured || !supabase) {
+      return StorageService.getSettings();
+    }
+
     try {
       const { data, error } = await supabase
         .from('chacara_details')
@@ -371,9 +396,7 @@ export const SupabaseService = {
         .single();
 
       if (error || !data) {
-        console.error('Supabase getSettings error / not found:', error?.message);
-        const local = localStorage.getItem('recanto_paz_settings');
-        return local ? JSON.parse(local) : INITIAL_CHACARA_DETAILS;
+        return StorageService.getSettings();
       }
 
       const settings: ChacaraDetails = {
@@ -392,16 +415,22 @@ export const SupabaseService = {
         quiet_hours: data.quiet_hours,
       };
 
-      localStorage.setItem('recanto_paz_settings', JSON.stringify(settings));
+      StorageService.saveSettings(settings);
       return settings;
-    } catch (err) {
-      console.error('Failed to fetch settings from Supabase:', err);
-      const local = localStorage.getItem('recanto_paz_settings');
-      return local ? JSON.parse(local) : INITIAL_CHACARA_DETAILS;
+    } catch (err: any) {
+      console.warn('Supabase getSettings unavailable, using local storage:', err?.message || err);
+      return StorageService.getSettings();
     }
   },
 
   async updateSettings(settings: ChacaraDetails): Promise<boolean> {
+    // Always persist locally
+    StorageService.saveSettings(settings);
+
+    if (!isSupabaseConfigured || !supabase) {
+      return true;
+    }
+
     try {
       const payload = {
         id: 'default',
@@ -414,14 +443,12 @@ export const SupabaseService = {
         .upsert(payload, { onConflict: 'id' });
 
       if (error) {
-        console.error('Supabase updateSettings error:', error.message);
-        return false;
+        console.warn('Supabase updateSettings notice:', error.message);
       }
-      localStorage.setItem('recanto_paz_settings', JSON.stringify(settings));
       return true;
-    } catch (err) {
-      console.error('Failed to update settings in Supabase:', err);
-      return false;
+    } catch (err: any) {
+      console.warn('Supabase updateSettings notice:', err?.message || err);
+      return true;
     }
   },
 
@@ -429,6 +456,12 @@ export const SupabaseService = {
   // RESET ALL TO MOCK
   // ==========================================
   async resetAllToMock(): Promise<void> {
+    StorageService.resetAllToMock();
+
+    if (!isSupabaseConfigured || !supabase) {
+      return;
+    }
+
     try {
       // Clear existing records
       await supabase.from('reservations').delete().neq('id', '___none___');
@@ -444,8 +477,8 @@ export const SupabaseService = {
         ...INITIAL_CHACARA_DETAILS,
         updated_at: new Date().toISOString(),
       });
-    } catch (err) {
-      console.error('Error resetting Supabase tables:', err);
+    } catch (err: any) {
+      console.warn('Error resetting remote Supabase tables:', err?.message || err);
     }
   },
 };

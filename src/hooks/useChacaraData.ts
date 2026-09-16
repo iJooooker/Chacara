@@ -64,7 +64,7 @@ export function useChacaraData() {
       if (dbChecklists) setChecklists(dbChecklists);
       if (dbSettings) setSettings(dbSettings);
     } catch (err) {
-      console.error('Error syncing with Supabase:', err);
+      console.warn('Sync notice:', err);
     } finally {
       setIsSyncing(false);
       setLoading(false);

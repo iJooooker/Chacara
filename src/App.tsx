@@ -12,7 +12,8 @@ import { WhatsAppModal } from './components/reservations/WhatsAppModal';
 import { PartnerReportModal } from './components/expenses/PartnerReportModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { Reservation, Expense } from './types';
-import { CheckCircle2, Trees, Database, RefreshCw } from 'lucide-react';
+import { isSupabaseConfigured } from './services/supabaseClient';
+import { CheckCircle2, Trees, Database, RefreshCw, HardDrive } from 'lucide-react';
 
 export default function App() {
   const {
@@ -84,16 +85,16 @@ export default function App() {
   const handleSaveReservation = async (data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>) => {
     if (editingReservation) {
       await updateReservation(editingReservation.id, data);
-      showToast('Locação atualizada no Supabase!');
+      showToast(isSupabaseConfigured ? 'Locação atualizada no Supabase!' : 'Locação atualizada com sucesso!');
     } else {
       await addReservation(data);
-      showToast('Nova locação salva no Supabase!');
+      showToast(isSupabaseConfigured ? 'Nova locação salva no Supabase!' : 'Nova locação salva com sucesso!');
     }
   };
 
   const handleDeleteReservation = async (id: string) => {
     await deleteReservation(id);
-    showToast('Locação excluída do banco.');
+    showToast('Locação excluída com sucesso.');
   };
 
   const handleOpenWhatsApp = (res: Reservation) => {
@@ -115,16 +116,16 @@ export default function App() {
   const handleSaveExpense = async (data: Omit<Expense, 'id' | 'created_at' | 'updated_at'>) => {
     if (editingExpense) {
       await updateExpense(editingExpense.id, data);
-      showToast('Despesa/Reforma atualizada no Supabase!');
+      showToast(isSupabaseConfigured ? 'Despesa/Reforma atualizada no Supabase!' : 'Despesa/Reforma atualizada com sucesso!');
     } else {
       await addExpense(data);
-      showToast('Despesa salva no Supabase!');
+      showToast(isSupabaseConfigured ? 'Despesa salva no Supabase!' : 'Despesa salva com sucesso!');
     }
   };
 
   const handleDeleteExpense = async (id: string) => {
     await deleteExpense(id);
-    showToast('Despesa excluída do banco.');
+    showToast('Despesa excluída com sucesso.');
   };
 
   return (
@@ -156,7 +157,7 @@ export default function App() {
           <div className="flex flex-col items-center justify-center py-24 space-y-4">
             <RefreshCw className="w-8 h-8 text-emerald-700 animate-spin" />
             <p className="text-sm font-semibold text-slate-600">
-              Conectando e carregando dados do Supabase...
+              {isSupabaseConfigured ? 'Sincronizando dados com o Supabase...' : 'Carregando dados da chácara...'}
             </p>
           </div>
         ) : (
@@ -226,9 +227,22 @@ export default function App() {
             <span>• Gestão de Locação por Temporada & Manutenções</span>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <Database className="w-3 h-3 mr-1 text-emerald-600" />
-              Supabase PostgreSQL Conectado
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${
+              isSupabaseConfigured
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-stone-50 text-stone-700 border-stone-300'
+            }`}>
+              {isSupabaseConfigured ? (
+                <>
+                  <Database className="w-3 h-3 mr-1 text-emerald-600" />
+                  Supabase PostgreSQL Conectado
+                </>
+              ) : (
+                <>
+                  <HardDrive className="w-3 h-3 mr-1 text-stone-600" />
+                  Armazenamento Local Seguro (Offline-First)
+                </>
+              )}
             </span>
           </div>
         </div>

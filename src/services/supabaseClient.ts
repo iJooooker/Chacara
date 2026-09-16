@@ -1,8 +1,29 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Clean the base URL in case it has trailing paths
-const rawUrl = 'https://ljvklaorekcdkosxozyd.supabase.co/rest/v1/';
-const SUPABASE_URL = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
-const SUPABASE_ANON_KEY = 'sb_publishable_iKv9sVX3x8UUX3eNI3wNnw_u_Z2W9u4';
+// Read from environment variables if provided
+const envUrl = (import.meta.env?.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
+const envKey = (import.meta.env?.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || '';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Verify URL is valid and not a placeholder/unresolvable test domain
+const isDeadOrPlaceholder = (url: string) =>
+  !url ||
+  url.includes('ljvklaorekcdkosxozyd') ||
+  url.includes('example.supabase.co') ||
+  !url.startsWith('http');
+
+export const isSupabaseConfigured = Boolean(
+  envUrl &&
+  envKey &&
+  !isDeadOrPlaceholder(envUrl)
+);
+
+export const SUPABASE_URL = isSupabaseConfigured
+  ? envUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '')
+  : '';
+
+export const SUPABASE_ANON_KEY = isSupabaseConfigured ? envKey : '';
+
+export const supabase: SupabaseClient | null = isSupabaseConfigured
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
