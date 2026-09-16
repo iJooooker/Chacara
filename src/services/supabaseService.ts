@@ -169,30 +169,22 @@ export const SupabaseService = {
     }
 
     try {
+      // Strip client-side photos array if present before sending to Supabase
+      const { photos, ...dbPayload } = localSaved;
       const { data, error } = await supabase
         .from('expenses')
-        .insert([localSaved])
+        .insert([dbPayload])
         .select()
         .single();
 
-      if (error) {
-        // If photos column isn't present in remote schema, retry without photos
-        if (localSaved.photos && localSaved.photos.length > 0) {
-          const { photos, ...payloadNoPhotos } = localSaved;
-          const { data: retryData, error: retryError } = await supabase
-            .from('expenses')
-            .insert([payloadNoPhotos])
-            .select()
-            .single();
-
-          if (!retryError && retryData) {
-            return { ...(retryData as Expense), photos };
-          }
-        }
-        console.warn('Supabase addExpense notice:', error.message);
-        return localSaved;
+      if (!error && data) {
+        return { ...(data as Expense), photos };
       }
-      return (data as Expense) || localSaved;
+
+      if (error) {
+        console.warn('Supabase addExpense notice:', error.message);
+      }
+      return localSaved;
     } catch (err: any) {
       console.warn('Supabase addExpense notice:', err?.message || err);
       return localSaved;
@@ -210,8 +202,9 @@ export const SupabaseService = {
     }
 
     try {
+      const { photos, ...dbUpdates } = updates;
       const payload = {
-        ...updates,
+        ...dbUpdates,
         updated_at: new Date().toISOString(),
       };
 
@@ -222,24 +215,14 @@ export const SupabaseService = {
         .select()
         .single();
 
-      if (error) {
-        if (payload.photos) {
-          const { photos, ...payloadNoPhotos } = payload;
-          const { data: retryData, error: retryError } = await supabase
-            .from('expenses')
-            .update(payloadNoPhotos)
-            .eq('id', id)
-            .select()
-            .single();
-
-          if (!retryError && retryData) {
-            return { ...(retryData as Expense), photos };
-          }
-        }
-        console.warn('Supabase updateExpense notice:', error.message);
-        return localUpdated;
+      if (!error && data) {
+        return { ...(data as Expense), photos: updates.photos ?? localUpdated?.photos };
       }
-      return (data as Expense) || localUpdated;
+
+      if (error) {
+        console.warn('Supabase updateExpense notice:', error.message);
+      }
+      return localUpdated;
     } catch (err: any) {
       console.warn('Supabase updateExpense notice:', err?.message || err);
       return localUpdated;
