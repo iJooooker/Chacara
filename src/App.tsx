@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useChacaraData } from './hooks/useChacaraData';
+import { useChacaraData, useGoogleCalendarAutoSync } from './hooks';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Header } from './components/common/Header';
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
@@ -75,6 +75,16 @@ export default function App() {
     return reservations.filter((r) => r.status === 'confirmed' && r.check_in >= today).length;
   }, [reservations]);
 
+  // Hook de Sincronização Automática com a Google Agenda
+  // Monitora alterações e novas reservas adicionadas/editadas e envia via API em background
+  const { syncReservationToGoogle } = useGoogleCalendarAutoSync({
+    reservations,
+    settings,
+    onUpdateReservation: updateReservation,
+    onNotify: (msg) => showToast(msg),
+    enabled: true,
+  });
+
   // Handlers for Reservations
   const handleOpenNewReservation = (prefilledDate?: string) => {
     setEditingReservation(null);
@@ -87,45 +97,23 @@ export default function App() {
   };
 
   const handleSaveReservation = async (
-    data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>,
-    syncWithGoogle?: boolean
+    data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>
   ) => {
+    const isNew = !editingReservation;
     let saved: Reservation | null = null;
+
     if (editingReservation) {
       saved = await updateReservation(editingReservation.id, data);
+      showToast(isSupabaseConfigured ? 'Locação atualizada no Supabase!' : 'Locação atualizada com sucesso!');
     } else {
       saved = await addReservation(data);
+      showToast(isSupabaseConfigured ? 'Nova locação salva no Supabase!' : 'Nova locação salva com sucesso!');
     }
 
-    if (syncWithGoogle && saved) {
-      try {
-        const token = await getAccessToken();
-        if (token) {
-          const pushRes = await pushReservationToGoogle(saved, settings, token);
-          if (pushRes?.eventId) {
-            await updateReservation(saved.id, {
-              google_calendar_event_id: pushRes.eventId,
-              last_synced_at: new Date().toISOString(),
-            });
-          }
-          showToast('✅ Locação salva e enviada para a Google Agenda via API!');
-          return;
-        } else {
-          showToast(
-            isSupabaseConfigured
-              ? '💾 Locação salva no Supabase! Conecte sua Google Agenda no botão acima para envio via API.'
-              : '💾 Locação salva! Conecte sua Google Agenda no botão acima para envio via API.'
-          );
-          return;
-        }
-      } catch (apiErr: any) {
-        console.error('Falha ao enviar reserva para a Google Agenda:', apiErr);
-        showToast('⚠️ Locação salva no banco! Falha ao comunicar com a API Google Agenda.');
-        return;
-      }
+    // Dispara a sincronização automática diretamente via API em segundo plano
+    if (saved) {
+      syncReservationToGoogle(saved, isNew);
     }
-
-    showToast(isSupabaseConfigured ? 'Locação salva no Supabase com sucesso!' : 'Locação salva com sucesso!');
   };
 
   const handleDeleteReservation = async (id: string) => {

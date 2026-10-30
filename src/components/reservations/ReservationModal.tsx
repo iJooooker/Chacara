@@ -20,8 +20,7 @@ interface ReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (
-    data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>,
-    syncWithGoogle?: boolean
+    data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>
   ) => void | Promise<void>;
   initialData?: Reservation | null;
   settings?: ChacaraDetails;
@@ -46,7 +45,6 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
   const [status, setStatus] = useState<ReservationStatus>('confirmed');
   const [contractNotes, setContractNotes] = useState('');
   const [depositDate, setDepositDate] = useState('');
-  const [syncWithGoogle, setSyncWithGoogle] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
@@ -181,7 +179,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onSave(reservationPayload, syncWithGoogle);
+      await onSave(reservationPayload);
       onClose();
     } catch (err: any) {
       console.error('Erro ao salvar locação:', err);
@@ -426,53 +424,29 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
           />
         </div>
 
-        {/* Sincronização Automática com Google Agenda via API (Sem abrir abas) */}
-        <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center space-x-2.5 text-xs font-bold text-emerald-950 cursor-pointer select-none">
-              <input
-                id="checkbox-sync-google"
-                type="checkbox"
-                checked={syncWithGoogle}
-                onChange={(e) => setSyncWithGoogle(e.target.checked)}
-                className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
-              />
-              <span className="flex items-center">
-                <Calendar className="w-4 h-4 mr-1.5 text-emerald-700" />
-                <span>Enviar para a Google Agenda via API em segundo plano</span>
-              </span>
-            </label>
-            <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-              100% Automático
+        {/* Sincronização Automática com Google Agenda via API (Sem necessidade de confirmação manual) */}
+        <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div className="flex items-center space-x-2">
+            <Calendar className="w-4 h-4 text-emerald-700 shrink-0" />
+            <span className="text-emerald-950 font-medium leading-tight">
+              Sincronização com Google Agenda é <strong>automática</strong> ao salvar (via API em segundo plano).
             </span>
           </div>
-
-          <p className="text-[11px] text-emerald-800/90 pl-6.5 leading-relaxed">
-            Salva diretamente nos servidores da Google Agenda via API. <strong>Não abre nenhuma aba ou janela no seu navegador.</strong>
-          </p>
-
-          <div className="pl-6.5 pt-0.5 flex items-center justify-between text-[11px]">
-            {isGoogleConnected ? (
-              <span className="inline-flex items-center font-semibold text-emerald-700">
-                <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                Conta Google conectada • Envio direto via API ativo
-              </span>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <span className="text-slate-500 font-medium">
-                  Conta Google não conectada nesta sessão.
-                </span>
-                <button
-                  type="button"
-                  onClick={handleQuickConnectGoogle}
-                  disabled={isConnectingGoogle}
-                  className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px] transition-colors cursor-pointer inline-flex items-center"
-                >
-                  {isConnectingGoogle ? 'Conectando...' : 'Conectar Google'}
-                </button>
-              </div>
-            )}
-          </div>
+          {isGoogleConnected ? (
+            <span className="inline-flex items-center text-[11px] font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md shrink-0 w-fit">
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+              API Conectada
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleQuickConnectGoogle}
+              disabled={isConnectingGoogle}
+              className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md font-bold text-[10px] transition-colors cursor-pointer shrink-0 w-fit"
+            >
+              {isConnectingGoogle ? 'Conectando...' : 'Conectar Google'}
+            </button>
+          )}
         </div>
 
         {/* Botoes de Ação */}
