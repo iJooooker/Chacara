@@ -2,13 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Reservation, PaymentStatus, ReservationStatus, ChacaraDetails } from '../../types';
 import { calculateDaysBetween, formatCurrency } from '../../utils/formatters';
-import { Calendar, User, Phone, Users, DollarSign, FileText, AlertCircle, Sparkles } from 'lucide-react';
-import { generateGoogleCalendarWebLink } from '../../services/googleCalendarService';
+import {
+  Calendar,
+  User,
+  Phone,
+  Users,
+  DollarSign,
+  FileText,
+  AlertCircle,
+  Sparkles,
+  CheckCircle2,
+  Loader2,
+} from 'lucide-react';
+import { getAccessToken, googleSignIn } from '../../services/googleAuth';
 
 interface ReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>) => void;
+  onSave: (
+    data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>,
+    syncWithGoogle?: boolean
+  ) => void | Promise<void>;
   initialData?: Reservation | null;
   settings?: ChacaraDetails;
 }
@@ -34,6 +48,31 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
   const [depositDate, setDepositDate] = useState('');
   const [syncWithGoogle, setSyncWithGoogle] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      getAccessToken().then((token) => {
+        setIsGoogleConnected(Boolean(token));
+      });
+    }
+  }, [isOpen]);
+
+  const handleQuickConnectGoogle = async () => {
+    setIsConnectingGoogle(true);
+    try {
+      const res = await googleSignIn();
+      if (res?.accessToken) {
+        setIsGoogleConnected(true);
+      }
+    } catch (err) {
+      console.warn('Conexão Google no modal:', err);
+    } finally {
+      setIsConnectingGoogle(false);
+    }
+  };
 
   useEffect(() => {
     if (initialData) {
@@ -100,7 +139,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName.trim()) {
       setErrorMessage('Por favor, informe o nome do cliente / responsável.');
@@ -140,31 +179,16 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       deposit_date: depositDate || undefined,
     };
 
-    onSave(reservationPayload);
-
-    if (syncWithGoogle) {
-      const dummyRes: Reservation = {
-        id: initialData?.id || 'temp',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        ...reservationPayload,
-      };
-      const fallbackSettings: ChacaraDetails = settings || {
-        name: 'Chácara Recanto da Paz',
-        caretaker_name: 'Marcos Caseiro',
-        caretaker_phone: '(19) 98765-4321',
-        daily_rate_default: 1000,
-        cleaning_fee_default: 150,
-        max_guests: 25,
-        location: 'Estrada das Palmeiras, km 4 - Paulínia/SP',
-        check_in_time: '09:00',
-        check_out_time: '21:00',
-      };
-      const webLink = generateGoogleCalendarWebLink(dummyRes, fallbackSettings);
-      window.open(webLink, '_blank');
+    setIsSubmitting(true);
+    try {
+      await onSave(reservationPayload, syncWithGoogle);
+      onClose();
+    } catch (err: any) {
+      console.error('Erro ao salvar locação:', err);
+      setErrorMessage(err?.message || 'Erro ao salvar locação. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   const daysStay = calculateDaysBetween(checkIn, checkOut);
@@ -402,23 +426,53 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
           />
         </div>
 
-        {/* Sincronização Automática com Google Agenda */}
-        <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
-          <label className="flex items-center space-x-2.5 text-xs font-semibold text-emerald-950 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={syncWithGoogle}
-              onChange={(e) => setSyncWithGoogle(e.target.checked)}
-              className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
-            />
-            <span className="flex items-center">
-              <Calendar className="w-4 h-4 mr-1.5 text-emerald-700" />
-              <span>Sincronizar com a Google Agenda ao salvar (abre o evento pronto com 1 clique)</span>
+        {/* Sincronização Automática com Google Agenda via API (Sem abrir abas) */}
+        <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center space-x-2.5 text-xs font-bold text-emerald-950 cursor-pointer select-none">
+              <input
+                id="checkbox-sync-google"
+                type="checkbox"
+                checked={syncWithGoogle}
+                onChange={(e) => setSyncWithGoogle(e.target.checked)}
+                className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+              />
+              <span className="flex items-center">
+                <Calendar className="w-4 h-4 mr-1.5 text-emerald-700" />
+                <span>Enviar para a Google Agenda via API em segundo plano</span>
+              </span>
+            </label>
+            <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+              100% Automático
             </span>
-          </label>
-          <span className="text-[10px] bg-emerald-200/80 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-            Automático
-          </span>
+          </div>
+
+          <p className="text-[11px] text-emerald-800/90 pl-6.5 leading-relaxed">
+            Salva diretamente nos servidores da Google Agenda via API. <strong>Não abre nenhuma aba ou janela no seu navegador.</strong>
+          </p>
+
+          <div className="pl-6.5 pt-0.5 flex items-center justify-between text-[11px]">
+            {isGoogleConnected ? (
+              <span className="inline-flex items-center font-semibold text-emerald-700">
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                Conta Google conectada • Envio direto via API ativo
+              </span>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <span className="text-slate-500 font-medium">
+                  Conta Google não conectada nesta sessão.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleQuickConnectGoogle}
+                  disabled={isConnectingGoogle}
+                  className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px] transition-colors cursor-pointer inline-flex items-center"
+                >
+                  {isConnectingGoogle ? 'Conectando...' : 'Conectar Google'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Botoes de Ação */}
@@ -426,16 +480,25 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             id="btn-save-reservation"
             type="submit"
-            className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors cursor-pointer"
+            disabled={isSubmitting}
+            className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-1.5 disabled:opacity-70"
           >
-            {initialData ? 'Salvar Alterações' : 'Confirmar & Salvar Locação'}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Salvando & Enviando via API...</span>
+              </>
+            ) : (
+              <span>{initialData ? 'Salvar Alterações' : 'Confirmar & Salvar Locação'}</span>
+            )}
           </button>
         </div>
       </form>

@@ -25,18 +25,53 @@ export interface ICalEvent {
 }
 
 /**
+ * Safely formats any time string (e.g. '9:00', '09:00', '9') into a 6-digit HHMMSS string (e.g. '090000')
+ */
+export function formatTimeToSixDigits(timeStr?: string, defaultTime = '09:00'): string {
+  if (!timeStr || !timeStr.trim()) timeStr = defaultTime;
+  const parts = timeStr.trim().split(':');
+  const hours = (parts[0] || '0').padStart(2, '0');
+  const minutes = (parts[1] || '00').padStart(2, '0');
+  return `${hours}${minutes}00`;
+}
+
+/**
+ * Safely formats any time string (e.g. '9:00', '09:00', '9') into a 5-char HH:MM string (e.g. '09:00')
+ */
+export function formatTimeToFiveChars(timeStr?: string, defaultTime = '09:00'): string {
+  if (!timeStr || !timeStr.trim()) timeStr = defaultTime;
+  const parts = timeStr.trim().split(':');
+  const hours = (parts[0] || '0').padStart(2, '0');
+  const minutes = (parts[1] || '00').padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
+ * Helper to add days to a YYYY-MM-DD string and return YYYYMMDD in UTC
+ */
+export function addDaysToDateString(dateStr: string, days: number): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCDate(d.getUTCDate() + days);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}${m}${dd}`;
+}
+
+/**
  * Builds the standard Google Calendar Event payload for a Reservation
  */
 export function buildGoogleCalendarEventPayload(
   reservation: Reservation,
   settings: ChacaraDetails
 ) {
-  const checkInTime = settings.check_in_time || '09:00';
-  const checkOutTime = settings.check_out_time || '21:00';
+  const checkInTime = formatTimeToFiveChars(settings.check_in_time, '09:00');
+  const checkOutTime = formatTimeToFiveChars(settings.check_out_time, '21:00');
 
   // Format times with timezone (America/Sao_Paulo: UTC-3)
-  const startDateTime = `${reservation.check_in}T${checkInTime.padStart(5, '0')}:00-03:00`;
-  const endDateTime = `${reservation.check_out}T${checkOutTime.padStart(5, '0')}:00-03:00`;
+  const startDateTime = `${reservation.check_in}T${checkInTime}:00-03:00`;
+  const endDateTime = `${reservation.check_out}T${checkOutTime}:00-03:00`;
 
   const paymentLabel =
     reservation.payment_status === 'paid'
@@ -239,14 +274,9 @@ export async function syncAllReservationsToGoogle(
  */
 export function generateGoogleCalendarWebLink(
   reservation: Reservation,
-  settings: ChacaraDetails
+  settings: ChacaraDetails,
+  isAllDay = false
 ): string {
-  const checkInTime = (settings.check_in_time || '09:00').replace(':', '');
-  const checkOutTime = (settings.check_out_time || '21:00').replace(':', '');
-
-  const startFormatted = reservation.check_in.replace(/-/g, '') + 'T' + checkInTime.padEnd(6, '0');
-  const endFormatted = reservation.check_out.replace(/-/g, '') + 'T' + checkOutTime.padEnd(6, '0');
-
   const paymentLabel =
     reservation.payment_status === 'paid'
       ? 'QUITADO'
@@ -254,34 +284,68 @@ export function generateGoogleCalendarWebLink(
       ? 'SINAL PAGO'
       : 'PENDENTE';
 
+  const checkInTime = formatTimeToFiveChars(settings.check_in_time, '09:00');
+  const checkOutTime = formatTimeToFiveChars(settings.check_out_time, '21:00');
+
+  let datesParam = '';
+  if (isAllDay) {
+    const startStr = reservation.check_in.replace(/-/g, '');
+    const endStr = addDaysToDateString(reservation.check_out, 1);
+    datesParam = `${startStr}/${endStr}`;
+  } else {
+    const startSix = formatTimeToSixDigits(settings.check_in_time, '09:00');
+    const endSix = formatTimeToSixDigits(settings.check_out_time, '21:00');
+    const startFormatted = reservation.check_in.replace(/-/g, '') + 'T' + startSix;
+    const endFormatted = reservation.check_out.replace(/-/g, '') + 'T' + endSix;
+    datesParam = `${startFormatted}/${endFormatted}`;
+  }
+
   const title = encodeURIComponent(`🏡 [${settings.name || 'Chácara'}] Reserva - ${reservation.client_name}`);
   const details = encodeURIComponent(
     `👤 Hóspede: ${reservation.client_name}\n` +
       `📱 WhatsApp: ${reservation.client_phone}\n` +
+      (reservation.client_document ? `📄 CPF: ${reservation.client_document}\n` : '') +
       `👥 Pessoas: ${reservation.guests_count} hóspedes\n` +
       `💰 Total: R$ ${reservation.total_amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-      `💵 Pago: R$ ${reservation.amount_paid?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
+      `💵 Sinal Pago: R$ ${reservation.amount_paid?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
       `💳 Restante: R$ ${reservation.remaining_amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
       `📊 Situação: ${paymentLabel}\n` +
-      (settings.location ? `📍 Local: ${settings.location}\n` : '') +
+      `🕒 Entrada: ${reservation.check_in} às ${checkInTime}\n` +
+      `🕒 Saída: ${reservation.check_out} às ${checkOutTime}\n` +
+      (settings.location ? `📍 Endereço: ${settings.location}\n` : '') +
       (reservation.contract_notes ? `📝 Obs: ${reservation.contract_notes}\n` : '') +
-      `\n🔗 Gerado pelo Gestor da Chácara.`
+      `\n🔗 Gestão Chácara Solaris`
   );
   const location = encodeURIComponent(settings.location || '');
 
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startFormatted}/${endFormatted}&ctz=America/Sao_Paulo&details=${details}&location=${location}`;
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${datesParam}&ctz=America/Sao_Paulo&details=${details}&location=${location}`;
+}
+
+export interface IcsOptions {
+  /**
+   * If true, exports events as All-Day blocks (DTSTART;VALUE=DATE).
+   * In Google Calendar mobile app, all-day events create prominent colored banners
+   * directly visible in the month grid view without having to open the day!
+   */
+  allDay?: boolean;
 }
 
 /**
  * Generates RFC 5545 compliant iCalendar (.ics) content for all active reservations.
- * This can be imported directly into Google Calendar (Web and Mobile app).
+ * Includes complete VTIMEZONE definition for America/Sao_Paulo and strict 6-digit HHMMSS times,
+ * preventing any timezone or day-shift bugs in Google Calendar and phone calendar apps.
  */
 export function generateReservationsIcsContent(
   reservations: Reservation[],
-  settings: ChacaraDetails
+  settings: ChacaraDetails,
+  options?: IcsOptions
 ): string {
-  const checkInTime = (settings.check_in_time || '09:00').replace(':', '') + '00';
-  const checkOutTime = (settings.check_out_time || '21:00').replace(':', '') + '00';
+  const isAllDay = Boolean(options?.allDay);
+  const checkInSixDigits = formatTimeToSixDigits(settings.check_in_time, '09:00');
+  const checkOutSixDigits = formatTimeToSixDigits(settings.check_out_time, '21:00');
+  const checkInReadable = formatTimeToFiveChars(settings.check_in_time, '09:00');
+  const checkOutReadable = formatTimeToFiveChars(settings.check_out_time, '21:00');
+
   const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
   const lines: string[] = [
@@ -292,13 +356,22 @@ export function generateReservationsIcsContent(
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${settings.name || 'Chácara'} - Reservas`,
     'X-WR-TIMEZONE:America/Sao_Paulo',
+    // Mandatory RFC 5545 VTIMEZONE block for America/Sao_Paulo (UTC-3)
+    'BEGIN:VTIMEZONE',
+    'TZID:America/Sao_Paulo',
+    'X-LIC-LOCATION:America/Sao_Paulo',
+    'BEGIN:STANDARD',
+    'TZOFFSETFROM:-0300',
+    'TZOFFSETTO:-0300',
+    'TZNAME:BRT',
+    'DTSTART:19700101T000000',
+    'END:STANDARD',
+    'END:VTIMEZONE',
   ];
 
   const active = reservations.filter((r) => r.status !== 'cancelled');
 
   for (const res of active) {
-    const startStr = res.check_in.replace(/-/g, '') + 'T' + checkInTime;
-    const endStr = res.check_out.replace(/-/g, '') + 'T' + checkOutTime;
     const paymentLabel =
       res.payment_status === 'paid'
         ? 'QUITADO'
@@ -306,33 +379,55 @@ export function generateReservationsIcsContent(
         ? 'SINAL PAGO'
         : 'PENDENTE';
 
-    const summary = `🏡 [${settings.name || 'Chácara'}] Reserva - ${res.client_name}`;
+    const summary = isAllDay
+      ? `🏡 [Chácara] ${res.client_name} (${res.payment_status === 'paid' ? 'Pago' : 'Pendente'})`
+      : `🏡 [${settings.name || 'Chácara'}] Reserva - ${res.client_name}`;
+
     const descParts = [
-      `Hóspede: ${res.client_name}`,
-      `WhatsApp / Tel: ${res.client_phone}`,
-      res.client_document ? `CPF: ${res.client_document}` : '',
-      `Quantidade: ${res.guests_count} pessoas`,
-      `Valor Total: R$ ${res.total_amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      `Sinal Pago: R$ ${res.amount_paid?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      `Restante a Pagar: R$ ${res.remaining_amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      `Situação: ${paymentLabel}`,
-      settings.location ? `Endereço: ${settings.location}` : '',
-      res.contract_notes ? `Notas: ${res.contract_notes}` : '',
+      `👤 Hóspede: ${res.client_name}`,
+      `📱 WhatsApp / Tel: ${res.client_phone}`,
+      res.client_document ? `📄 CPF: ${res.client_document}` : '',
+      `👥 Quantidade de Pessoas: ${res.guests_count} hóspedes`,
+      `💰 Valor Total: R$ ${res.total_amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      `💵 Sinal Pago: R$ ${res.amount_paid?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      `💳 Restante a Pagar: R$ ${res.remaining_amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      `📊 Situação: ${paymentLabel}`,
+      `🕒 Entrada: ${res.check_in} às ${checkInReadable}`,
+      `🕒 Saída: ${res.check_out} às ${checkOutReadable}`,
+      settings.location ? `📍 Endereço: ${settings.location}` : '',
+      res.contract_notes ? `📝 Notas: ${res.contract_notes}` : '',
+      `\n🔗 Atualizado pelo App de Gestão da Chácara`,
     ].filter(Boolean);
 
     const desc = descParts.join('\\n');
 
     lines.push('BEGIN:VEVENT');
+    // Using deterministic UID so importing updates the previously placed events in Google Calendar
     lines.push(`UID:chacara-reserva-${res.id}@chacarasolaris`);
     lines.push(`DTSTAMP:${now}`);
-    lines.push(`DTSTART;TZID=America/Sao_Paulo:${startStr}`);
-    lines.push(`DTEND;TZID=America/Sao_Paulo:${endStr}`);
+    // Sequence 2 tells Google Calendar this is a higher-priority update to existing imported events
+    lines.push('SEQUENCE:2');
+
+    if (isAllDay) {
+      // In RFC 5545, VALUE=DATE end date is exclusive, so add 1 day to check_out
+      const startDay = res.check_in.replace(/-/g, '');
+      const endDayExclusive = addDaysToDateString(res.check_out, 1);
+      lines.push(`DTSTART;VALUE=DATE:${startDay}`);
+      lines.push(`DTEND;VALUE=DATE:${endDayExclusive}`);
+    } else {
+      const startStr = res.check_in.replace(/-/g, '') + 'T' + checkInSixDigits;
+      const endStr = res.check_out.replace(/-/g, '') + 'T' + checkOutSixDigits;
+      lines.push(`DTSTART;TZID=America/Sao_Paulo:${startStr}`);
+      lines.push(`DTEND;TZID=America/Sao_Paulo:${endStr}`);
+    }
+
     lines.push(`SUMMARY:${summary.replace(/,/g, '\\,')}`);
     lines.push(`DESCRIPTION:${desc.replace(/,/g, '\\,')}`);
     if (settings.location) {
       lines.push(`LOCATION:${settings.location.replace(/,/g, '\\,')}`);
     }
     lines.push('STATUS:CONFIRMED');
+    lines.push('TRANSP:OPAQUE');
     lines.push('END:VEVENT');
   }
 
@@ -345,18 +440,20 @@ export function generateReservationsIcsContent(
  */
 export function downloadReservationsIcsFile(
   reservations: Reservation[],
-  settings: ChacaraDetails
+  settings: ChacaraDetails,
+  options?: IcsOptions
 ): void {
-  const icsContent = generateReservationsIcsContent(reservations, settings);
+  const icsContent = generateReservationsIcsContent(reservations, settings, options);
   const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
+  const suffix = options?.allDay ? 'destaque-mensal-corrigido' : 'horarios-corrigido';
   const fileName = `agenda-${(settings.name || 'chacara')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '-')}-reservas.ics`;
+    .replace(/\s+/g, '-')}-${suffix}.ics`;
   a.download = fileName;
   document.body.appendChild(a);
   a.click();

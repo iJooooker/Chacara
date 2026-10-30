@@ -14,6 +14,8 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { GoogleCalendarSyncModal } from './components/calendar/GoogleCalendarSyncModal';
 import { Reservation, Expense } from './types';
 import { isSupabaseConfigured } from './services/supabaseClient';
+import { getAccessToken } from './services/googleAuth';
+import { pushReservationToGoogle } from './services/googleCalendarService';
 import { CheckCircle2, Trees, Database, RefreshCw, HardDrive } from 'lucide-react';
 
 export default function App() {
@@ -84,14 +86,46 @@ export default function App() {
     setIsReservationModalOpen(true);
   };
 
-  const handleSaveReservation = async (data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>) => {
+  const handleSaveReservation = async (
+    data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>,
+    syncWithGoogle?: boolean
+  ) => {
+    let saved: Reservation | null = null;
     if (editingReservation) {
-      await updateReservation(editingReservation.id, data);
-      showToast(isSupabaseConfigured ? 'Locação atualizada no Supabase!' : 'Locação atualizada com sucesso!');
+      saved = await updateReservation(editingReservation.id, data);
     } else {
-      await addReservation(data);
-      showToast(isSupabaseConfigured ? 'Nova locação salva no Supabase!' : 'Nova locação salva com sucesso!');
+      saved = await addReservation(data);
     }
+
+    if (syncWithGoogle && saved) {
+      try {
+        const token = await getAccessToken();
+        if (token) {
+          const pushRes = await pushReservationToGoogle(saved, settings, token);
+          if (pushRes?.eventId) {
+            await updateReservation(saved.id, {
+              google_calendar_event_id: pushRes.eventId,
+              last_synced_at: new Date().toISOString(),
+            });
+          }
+          showToast('✅ Locação salva e enviada para a Google Agenda via API!');
+          return;
+        } else {
+          showToast(
+            isSupabaseConfigured
+              ? '💾 Locação salva no Supabase! Conecte sua Google Agenda no botão acima para envio via API.'
+              : '💾 Locação salva! Conecte sua Google Agenda no botão acima para envio via API.'
+          );
+          return;
+        }
+      } catch (apiErr: any) {
+        console.error('Falha ao enviar reserva para a Google Agenda:', apiErr);
+        showToast('⚠️ Locação salva no banco! Falha ao comunicar com a API Google Agenda.');
+        return;
+      }
+    }
+
+    showToast(isSupabaseConfigured ? 'Locação salva no Supabase com sucesso!' : 'Locação salva com sucesso!');
   };
 
   const handleDeleteReservation = async (id: string) => {

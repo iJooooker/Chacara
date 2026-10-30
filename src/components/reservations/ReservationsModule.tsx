@@ -30,9 +30,12 @@ import {
   Eye,
   FileCheck,
   ExternalLink,
+  CalendarCheck,
+  Loader2,
 } from 'lucide-react';
 import { CalendarGrid } from './CalendarGrid';
-import { generateGoogleCalendarWebLink } from '../../services/googleCalendarService';
+import { pushReservationToGoogle } from '../../services/googleCalendarService';
+import { getAccessToken } from '../../services/googleAuth';
 
 interface ReservationsModuleProps {
   reservations: Reservation[];
@@ -62,6 +65,30 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [selectedForDetails, setSelectedForDetails] = useState<Reservation | null>(null);
+  const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
+
+  const handleDirectGoogleSync = async (res: Reservation) => {
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        if (onOpenGoogleCalendar) onOpenGoogleCalendar();
+        return;
+      }
+
+      setSyncingRowId(res.id);
+      const result = await pushReservationToGoogle(res, settings, token);
+      if (result?.eventId) {
+        onUpdateReservation(res.id, {
+          google_calendar_event_id: result.eventId,
+          last_synced_at: new Date().toISOString(),
+        });
+      }
+    } catch (err: any) {
+      console.error('Erro ao sincronizar via API:', err);
+    } finally {
+      setSyncingRowId(null);
+    }
+  };
 
   // Financial summary of reservations
   const activeReservations = useMemo(
@@ -461,17 +488,31 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
                                 <MessageCircle className="w-4 h-4" />
                               </button>
 
-                              {/* Google Calendar Link */}
-                              <a
+                              {/* Google Calendar Direct API Sync */}
+                              <button
                                 id={`btn-table-gcal-${res.id}`}
-                                href={generateGoogleCalendarWebLink(res, settings)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
-                                title="Abrir / Adicionar evento na Google Agenda"
+                                type="button"
+                                disabled={syncingRowId === res.id}
+                                onClick={() => handleDirectGoogleSync(res)}
+                                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                                  res.google_calendar_event_id
+                                    ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                                    : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'
+                                }`}
+                                title={
+                                  res.google_calendar_event_id
+                                    ? 'Sincronizado na Google Agenda via API (clique para reenviar)'
+                                    : 'Enviar para Google Agenda via API em segundo plano'
+                                }
                               >
-                                <Calendar className="w-4 h-4" />
-                              </a>
+                                {syncingRowId === res.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                ) : res.google_calendar_event_id ? (
+                                  <CalendarCheck className="w-4 h-4 text-emerald-700" />
+                                ) : (
+                                  <Calendar className="w-4 h-4" />
+                                )}
+                              </button>
 
                               {/* Quick checkin / checkout progress */}
                               {res.status === 'confirmed' && (

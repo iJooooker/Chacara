@@ -164,10 +164,19 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
     }
   };
 
-  const handleDownloadIcs = () => {
-    downloadReservationsIcsFile(reservations, settings);
-    setDownloadSuccess(true);
-    setTimeout(() => setDownloadSuccess(false), 3000);
+  const [downloadSuccessAllDay, setDownloadSuccessAllDay] = useState(false);
+  const [downloadSuccessTimed, setDownloadSuccessTimed] = useState(false);
+
+  const handleDownloadIcsAllDay = () => {
+    downloadReservationsIcsFile(reservations, settings, { allDay: true });
+    setDownloadSuccessAllDay(true);
+    setTimeout(() => setDownloadSuccessAllDay(false), 3000);
+  };
+
+  const handleDownloadIcsTimed = () => {
+    downloadReservationsIcsFile(reservations, settings, { allDay: false });
+    setDownloadSuccessTimed(true);
+    setTimeout(() => setDownloadSuccessTimed(false), 3000);
   };
 
   const handleSaveICalUrl = () => {
@@ -235,15 +244,15 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
                 {/* Method 1: Download full calendar file */}
                 <button
                   type="button"
-                  onClick={handleDownloadIcs}
+                  onClick={handleDownloadIcsAllDay}
                   className="p-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-xs flex flex-col items-start space-y-1 shadow-xs transition-colors cursor-pointer text-left"
                 >
                   <div className="flex items-center space-x-1.5">
                     <Download className="w-4 h-4 text-emerald-200" />
-                    <span>1. Baixar Calendário Completo (.ics)</span>
+                    <span>1. Baixar Calendário (Destaque Mensal .ics)</span>
                   </div>
                   <span className="text-[11px] text-emerald-100 font-normal">
-                    Contém todas as {activeReservationsCount} reservas. Abre direto no celular ou no Google Agenda Web.
+                    Exibe faixas coloridas com o nome do cliente no mês. Datas 100% corrigidas!
                   </span>
                 </button>
 
@@ -267,48 +276,113 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
           </div>
         )}
 
-        {/* Primary Action Card: 1-Click Sync or Download .ICS */}
+        {/* Correction Explanation Banner */}
+        <div className="bg-emerald-50/90 border border-emerald-300/80 rounded-xl p-4 text-xs space-y-2 text-emerald-950 shadow-2xs">
+          <div className="flex items-center space-x-2 font-bold text-emerald-900 text-sm">
+            <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
+            <span>Datas Corrigidas com Fuso Horário de Brasília (America/Sao_Paulo)</span>
+          </div>
+          <p className="text-emerald-800/90 leading-relaxed text-[12px]">
+            O arquivo anterior sofreu um deslocamento de 3 dias no Google Calendar porque o horário inicial <code className="bg-emerald-200/60 px-1 py-0.5 rounded font-mono text-[11px]">9:00</code> sem o zero à esquerda foi interpretado como 90 horas pelo aplicativo. 
+            <strong> Já corrigimos a formatação internacional RFC 5545 com fuso horário oficial e atualizador automático de eventos.</strong>
+          </p>
+        </div>
+
+        {/* Primary Action Card: 1-Click Sync or Download .ICS with 2 Formats */}
         <div className="bg-white border-2 border-emerald-600/30 rounded-xl p-5 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Mais Fácil & Rápido
-                </span>
-                <span className="text-xs text-slate-500 font-medium">Funciona em qualquer aparelho</span>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                100% Corrigido
+              </span>
+              <span className="text-xs text-slate-500 font-medium">Compatível com Android, iPhone e Google Web</span>
+            </div>
+            <h4 className="text-base font-bold text-slate-900 mt-1">
+              Baixar Arquivo da Agenda Corrigido ({activeReservationsCount} reservas ativas)
+            </h4>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Escolha abaixo o formato visual que você prefere ver no aplicativo Google Agenda do seu celular:
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Format 1: All-Day Month Banner (Recommended for Month View) */}
+            <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/40 flex flex-col justify-between space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-950 flex items-center">
+                    <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                    Opção 1: Destaque no Mês (Recomendado)
+                  </span>
+                  <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded">
+                    Visual do seu print
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-800/90 leading-relaxed">
+                  Cria uma <strong>faixa colorida com o nome do cliente</strong> direto na tela do mês. Ideal para bater o olho rápido na rua sem precisar clicar no dia.
+                </p>
               </div>
-              <h4 className="text-base font-bold text-slate-900 mt-1">
-                Baixar Agenda da Chácara ({activeReservationsCount} reservas ativas)
-              </h4>
-              <p className="text-xs text-slate-600 mt-0.5">
-                Gera o arquivo oficial de calendário (.ics) com todas as datas marcadas (incluindo Solange, hóspedes, valores e WhatsApp).
-              </p>
+
+              <button
+                type="button"
+                onClick={handleDownloadIcsAllDay}
+                className="w-full py-2.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center space-x-2 transition-all cursor-pointer"
+              >
+                {downloadSuccessAllDay ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-200" />
+                    <span>Baixado com Sucesso!</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 text-emerald-200" />
+                    <span>Baixar Formato Destaque no Mês (.ics)</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handleDownloadIcs}
-              className="px-4 py-3 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white rounded-lg font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center space-x-2 transition-all cursor-pointer shrink-0"
-            >
-              {downloadSuccess ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-200" />
-                  <span>Arquivo Baixado!</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4 text-emerald-200" />
-                  <span>Baixar Arquivo da Agenda (.ics)</span>
-                </>
-              )}
-            </button>
+            {/* Format 2: Timed Events (09:00 to 21:00) */}
+            <div className="p-4 rounded-xl border border-stone-200 bg-stone-50 flex flex-col justify-between space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900">
+                    Opção 2: Com Horário Marcado
+                  </span>
+                  <span className="text-[10px] font-bold bg-stone-200 text-slate-700 px-1.5 py-0.5 rounded">
+                    09h00 às 21h00
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Salva com horário específico de entrada (check-in {settings.check_in_time}) e saída (check-out {settings.check_out_time}) com fuso oficial de Brasília.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDownloadIcsTimed}
+                className="w-full py-2.5 px-3 bg-stone-700 hover:bg-stone-800 text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center space-x-2 transition-all cursor-pointer"
+              >
+                {downloadSuccessTimed ? (
+                  <>
+                    <Check className="w-4 h-4 text-stone-200" />
+                    <span>Baixado com Sucesso!</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 text-stone-200" />
+                    <span>Baixar Formato com Horários (.ics)</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Quick instructions on how to use .ics */}
           <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2">
             <div className="flex items-center space-x-1.5">
               <CalendarCheck className="w-4 h-4 text-emerald-600" />
-              <span>No celular: basta tocar no arquivo baixado e ele adiciona à Google Agenda.</span>
+              <span>Ao importar o novo arquivo, o Google Agenda move os eventos para as datas certas automaticamente.</span>
             </div>
             <a
               href="https://calendar.google.com/calendar/u/0/r/settings/export"
