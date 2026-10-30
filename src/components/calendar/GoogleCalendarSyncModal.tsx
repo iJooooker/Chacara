@@ -7,6 +7,8 @@ import {
   getAccessToken,
   logoutGoogle,
   getCurrentUser,
+  getOAuthClientId,
+  setCustomOAuthClientId,
 } from '../../services/googleAuth';
 import {
   syncAllReservationsToGoogle,
@@ -32,6 +34,9 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Key,
+  ShieldAlert,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 
@@ -59,6 +64,14 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
+  const [isOriginMismatch, setIsOriginMismatch] = useState(false);
+  const [currentOrigin, setCurrentOrigin] = useState<string>(
+    typeof window !== 'undefined' ? window.location.origin : 'https://controledelocacao.vercel.app'
+  );
+  const [copiedOrigin, setCopiedOrigin] = useState(false);
+  const [customClientIdInput, setCustomClientIdInput] = useState<string>('');
+  const [showAdvancedOAuth, setShowAdvancedOAuth] = useState(false);
+  const [savedClientIdSuccess, setSavedClientIdSuccess] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [showHowToGuide, setShowHowToGuide] = useState(false);
   const [iCalUrl, setICalUrl] = useState(
@@ -69,11 +82,17 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
 
   // Monitor auth state on mount
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCurrentOrigin(window.location.origin);
+      setCustomClientIdInput(getOAuthClientId());
+    }
+
     const unsubscribe = initAuth(
       (authUser, token) => {
         setUser(authUser);
         setAccessToken(token);
         setUnauthorizedDomain(null);
+        setIsOriginMismatch(false);
       },
       () => {
         setUser(null);
@@ -94,10 +113,25 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
     };
   }, []);
 
+  const handleCopyOrigin = () => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(currentOrigin);
+      setCopiedOrigin(true);
+      setTimeout(() => setCopiedOrigin(false), 2500);
+    }
+  };
+
+  const handleSaveCustomClientId = () => {
+    setCustomOAuthClientId(customClientIdInput);
+    setSavedClientIdSuccess(true);
+    setTimeout(() => setSavedClientIdSuccess(false), 2500);
+  };
+
   const handleSignIn = async () => {
     setIsAuthenticating(true);
     setSyncError(null);
     setUnauthorizedDomain(null);
+    setIsOriginMismatch(false);
 
     try {
       const result = await googleSignIn();
@@ -105,6 +139,7 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
         setUser(result.user);
         setAccessToken(result.accessToken);
         setUnauthorizedDomain(null);
+        setIsOriginMismatch(false);
       }
     } catch (err: any) {
       console.error('Falha ao conectar com Google:', err);
@@ -113,10 +148,21 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
         err?.code === 'auth/unauthorized-domain' ||
         err?.message?.includes('unauthorized-domain');
 
-      if (isUnauth) {
-        const domain =
-          err?.domain || (typeof window !== 'undefined' ? window.location.hostname : 'este domínio');
+      const isMismatch =
+        err?.isOriginMismatch ||
+        err?.code === 'origin_mismatch' ||
+        err?.message?.includes('origin_mismatch') ||
+        err?.message?.includes('origin');
+
+      const domain =
+        err?.domain || (typeof window !== 'undefined' ? window.location.hostname : 'controledelocacao.vercel.app');
+      const origin =
+        err?.origin || (typeof window !== 'undefined' ? window.location.origin : 'https://controledelocacao.vercel.app');
+
+      if (isUnauth || isMismatch) {
         setUnauthorizedDomain(domain);
+        setCurrentOrigin(origin);
+        setIsOriginMismatch(true);
         setSyncError(null);
       } else {
         setSyncError(err?.message || 'Falha ao autenticar com a conta Google. Tente novamente.');
@@ -218,30 +264,120 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
           </div>
         </div>
 
-        {/* Unauthorized Domain Alert (Triggered when running on custom domain like controledelocacao.vercel.app) */}
-        {unauthorizedDomain && (
-          <div className="bg-amber-50/90 border border-amber-300 rounded-xl p-4.5 text-xs sm:text-sm space-y-3.5 shadow-xs">
-            <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-400/30 flex items-center justify-center shrink-0 text-amber-700">
-                <AlertCircle className="w-4 h-4" />
+        {/* Unauthorized Domain / Erro 400: origin_mismatch Guide */}
+        {(unauthorizedDomain || isOriginMismatch) && (
+          <div className="bg-amber-50/95 border-2 border-amber-400 rounded-xl p-5 text-xs sm:text-sm space-y-4 shadow-sm animate-fade-in">
+            <div className="flex items-start space-x-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center shrink-0 text-amber-800 mt-0.5">
+                <ShieldAlert className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <h4 className="font-bold text-amber-900 text-sm">
-                  Domínio Vercel Detectado: <span className="font-mono underline">{unauthorizedDomain}</span>
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 border border-amber-300">
+                    Erro 400: origin_mismatch
+                  </span>
+                  <span className="text-xs font-semibold text-amber-800">Bloqueio de Segurança do Google</span>
+                </div>
+                <h4 className="font-bold text-amber-950 text-sm sm:text-base">
+                  Como autorizar o domínio <span className="font-mono text-emerald-900 bg-white/80 px-1.5 py-0.5 rounded border border-amber-300">{unauthorizedDomain || 'controledelocacao.vercel.app'}</span> no Google Cloud
                 </h4>
-                <p className="text-amber-800 leading-relaxed text-xs">
-                  Por segurança de privacidade do Google, autenticações diretas via popup exigem autorização do domínio no console do Firebase.
+                <p className="text-amber-900/90 leading-relaxed text-xs">
+                  O Google bloqueou a conexão porque o seu site no Vercel (ou domínio customizado) ainda não está cadastrado na lista de <strong>Origens JavaScript autorizadas</strong> do projeto Google Cloud.
                 </p>
               </div>
             </div>
 
-            <div className="bg-white/90 border border-amber-200/80 rounded-lg p-3.5 space-y-2.5">
-              <div className="flex items-center text-emerald-800 font-bold text-xs uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
-                Soluções 100% imediatas (sem erros e sem precisar configurar nada):
+            {/* Quick 1-Click Copy Box */}
+            <div className="bg-white/95 border border-amber-300/80 rounded-lg p-3.5 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Sua Origem Web Exata (para colar no Google Cloud):
+                  </span>
+                  <div className="font-mono text-xs sm:text-sm font-bold text-slate-800 select-all mt-0.5">
+                    {currentOrigin}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyOrigin}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg flex items-center justify-center space-x-1.5 shrink-0 transition-all cursor-pointer shadow-xs"
+                >
+                  {copiedOrigin ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span>Origem Copiada!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar Origem</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Step-by-step instructions */}
+            <div className="bg-white/90 border border-amber-200/90 rounded-lg p-4 space-y-3">
+              <h5 className="font-bold text-amber-950 text-xs sm:text-sm flex items-center">
+                <span className="w-5 h-5 rounded-full bg-amber-600 text-white font-bold flex items-center justify-center text-[11px] mr-2">!</span>
+                3 Passos rápidos para liberar no Google Cloud Console:
+              </h5>
+
+              <div className="space-y-2.5 text-xs text-slate-700">
+                <div className="flex items-start space-x-2">
+                  <span className="font-black text-amber-800">1.</span>
+                  <div>
+                    <span className="font-semibold text-slate-900">Acesse o Google Cloud Console: </span>
+                    <a
+                      href="https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0768173310"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-emerald-700 font-bold hover:underline"
+                    >
+                      <span>Abrir Credenciais no Google Cloud</span>
+                      <ExternalLink className="w-3 h-3 ml-1" />
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-2">
+                  <span className="font-black text-amber-800">2.</span>
+                  <div>
+                    <span className="font-semibold text-slate-900">Edite o ID do cliente OAuth 2.0 Web: </span>
+                    <span>
+                      Clique no cliente Web listado. Na seção <strong>"Origens JavaScript autorizadas"</strong>, clique em <strong>+ Adicionar URI</strong> e cole: <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold text-emerald-800">{currentOrigin}</code>. Em <strong>"URIs de redirecionamento autorizados"</strong>, adicione também o mesmo link e clique em <strong>Salvar</strong>.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-2">
+                  <span className="font-black text-amber-800">3.</span>
+                  <div>
+                    <span className="font-semibold text-slate-900">No Firebase Console: </span>
+                    <a
+                      href="https://console.firebase.google.com/project/gen-lang-client-0768173310/authentication/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-emerald-700 font-bold hover:underline"
+                    >
+                      <span>Abrir Domínios Autorizados no Firebase</span>
+                      <ExternalLink className="w-3 h-3 ml-1" />
+                    </a>
+                    <span> — na aba "Domínios autorizados", clique em Adicionar domínio e insira <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold text-emerald-800">{unauthorizedDomain || 'controledelocacao.vercel.app'}</code>.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Alternatives that work immediately */}
+            <div className="bg-emerald-50/90 border border-emerald-300 rounded-lg p-3.5 space-y-2">
+              <div className="flex items-center text-emerald-900 font-bold text-xs uppercase tracking-wider">
+                <Sparkles className="w-4 h-4 mr-1.5 text-emerald-600" />
+                Soluções 100% imediatas (sem precisar configurar o Google Cloud):
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                {/* Method 1: Download full calendar file */}
                 <button
                   type="button"
                   onClick={handleDownloadIcsAllDay}
@@ -252,23 +388,22 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
                     <span>1. Baixar Calendário (Destaque Mensal .ics)</span>
                   </div>
                   <span className="text-[11px] text-emerald-100 font-normal">
-                    Exibe faixas coloridas com o nome do cliente no mês. Datas 100% corrigidas!
+                    Importe no seu celular e veja todas as datas corrigidas no mês!
                   </span>
                 </button>
 
-                {/* Method 2: Open import page */}
                 <a
                   href="https://calendar.google.com/calendar/u/0/r/settings/export"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-3 bg-stone-100 hover:bg-stone-200 text-slate-800 border border-stone-300 rounded-lg font-bold text-xs flex flex-col items-start space-y-1 transition-colors cursor-pointer text-left"
+                  className="p-3 bg-white hover:bg-stone-100 text-slate-800 border border-emerald-300 rounded-lg font-bold text-xs flex flex-col items-start space-y-1 transition-colors cursor-pointer text-left"
                 >
                   <div className="flex items-center space-x-1.5">
-                    <ExternalLink className="w-4 h-4 text-slate-600" />
+                    <ExternalLink className="w-4 h-4 text-emerald-700" />
                     <span>2. Importar no Google Agenda Web</span>
                   </div>
                   <span className="text-[11px] text-slate-600 font-normal">
-                    Acesse a página oficial do Google Agenda e selecione o arquivo baixado.
+                    Abre a tela de importação oficial do Google Agenda.
                   </span>
                 </a>
               </div>
@@ -682,6 +817,61 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
               Salvar
             </button>
           </div>
+        </div>
+
+        {/* Advanced OAuth Client ID configuration (Optional for user's own GCP project) */}
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+          <button
+            type="button"
+            onClick={() => setShowAdvancedOAuth(!showAdvancedOAuth)}
+            className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center space-x-2 text-xs sm:text-sm font-bold text-slate-800">
+              <Key className="w-4 h-4 text-slate-600" />
+              <span>Configuração do ID do Cliente OAuth (Google Cloud Console)</span>
+            </div>
+            {showAdvancedOAuth ? (
+              <ChevronUp className="w-4 h-4 text-slate-500" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-500" />
+            )}
+          </button>
+
+          {showAdvancedOAuth && (
+            <div className="p-4 pt-1 border-t border-slate-200 text-xs text-slate-700 space-y-3 bg-white">
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                ID do cliente Web OAuth atualmente configurado no app. Se você criou um Client ID próprio no seu Google Cloud Console, você pode inseri-lo aqui:
+              </p>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={customClientIdInput}
+                  onChange={(e) => setCustomClientIdInput(e.target.value)}
+                  className="flex-1 text-xs font-mono p-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-700"
+                  placeholder="502953849635-...apps.googleusercontent.com"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveCustomClientId}
+                  className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                >
+                  {savedClientIdSuccess ? '✓ Salvo!' : 'Salvar ID'}
+                </button>
+              </div>
+              <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                <span>Projeto Padrão: <code className="font-mono text-slate-700">gen-lang-client-0768173310</code></span>
+                <a
+                  href="https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0768173310"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-700 font-bold hover:underline inline-flex items-center"
+                >
+                  <span>Abrir Console</span>
+                  <ExternalLink className="w-3 h-3 ml-1" />
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </Modal>

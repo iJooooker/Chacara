@@ -51,6 +51,26 @@ export const initAuth = (
   });
 };
 
+export const getOAuthClientId = (): string => {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('custom_google_oauth_client_id');
+    if (custom && custom.trim().length > 0) {
+      return custom.trim();
+    }
+  }
+  return firebaseConfig.oAuthClientId;
+};
+
+export const setCustomOAuthClientId = (clientId: string) => {
+  if (typeof window !== 'undefined') {
+    if (clientId && clientId.trim().length > 0) {
+      localStorage.setItem('custom_google_oauth_client_id', clientId.trim());
+    } else {
+      localStorage.removeItem('custom_google_oauth_client_id');
+    }
+  }
+};
+
 /**
  * Loads Google Identity Services (GIS) client library dynamically
  */
@@ -86,29 +106,48 @@ export const requestGisAccessToken = async (): Promise<string> => {
     throw new Error('Google Identity Services não inicializado');
   }
 
-  return new Promise((resolve, reject) => {
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: firebaseConfig.oAuthClientId,
-      scope: SCOPES.join(' '),
-      callback: (tokenResponse: any) => {
-        if (tokenResponse.error) {
-          reject(new Error(tokenResponse.error_description || tokenResponse.error));
-        } else if (tokenResponse.access_token) {
-          cachedAccessToken = tokenResponse.access_token;
-          resolve(tokenResponse.access_token);
-        } else {
-          reject(new Error('Nenhum token retornado pelo Google.'));
-        }
-      },
-    });
+  const clientId = getOAuthClientId();
 
-    client.requestAccessToken({ prompt: 'select_account' });
+  return new Promise((resolve, reject) => {
+    try {
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPES.join(' '),
+        callback: (tokenResponse: any) => {
+          if (tokenResponse.error) {
+            const err = new Error(tokenResponse.error_description || tokenResponse.error);
+            (err as any).code = tokenResponse.error;
+            if (tokenResponse.error === 'origin_mismatch' || tokenResponse.error?.includes('origin')) {
+              (err as any).isOriginMismatch = true;
+            }
+            reject(err);
+          } else if (tokenResponse.access_token) {
+            cachedAccessToken = tokenResponse.access_token;
+            resolve(tokenResponse.access_token);
+          } else {
+            reject(new Error('Nenhum token retornado pelo Google.'));
+          }
+        },
+        error_callback: (err: any) => {
+          console.error('GIS Error callback:', err);
+          const errorObj = new Error(err?.message || 'Erro no cliente de autenticação Google');
+          (errorObj as any).isOriginMismatch = true;
+          reject(errorObj);
+        },
+      });
+
+      client.requestAccessToken({ prompt: 'select_account' });
+    } catch (err: any) {
+      reject(err);
+    }
   });
 };
 
 export interface AuthErrorInfo {
   isUnauthorizedDomain: boolean;
+  isOriginMismatch: boolean;
   domain: string;
+  origin: string;
   originalMessage: string;
 }
 
@@ -129,9 +168,13 @@ export const googleSignIn = async (): Promise<{ user: User | null; accessToken: 
   } catch (error: any) {
     console.error('Erro na autenticação com Google (Firebase):', error);
 
+    const isUnauthDomain =
+      error?.code === 'auth/unauthorized-domain' ||
+      error?.message?.includes('unauthorized-domain');
+
     // If unauthorized-domain (e.g. running on custom domain like controledelocacao.vercel.app),
     // attempt fallback via Google Identity Services directly
-    if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
+    if (isUnauthDomain) {
       try {
         console.info('Tentando autenticação direta via Google Identity Services...');
         const token = await requestGisAccessToken();
@@ -141,15 +184,42 @@ export const googleSignIn = async (): Promise<{ user: User | null; accessToken: 
         }
       } catch (gisError: any) {
         console.warn('Fallback GIS também falhou:', gisError);
-      }
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://controledelocacao.vercel.app';
+        const hostname = typeof window !== 'undefined' ? window.location.hostname : 'controledelocacao.vercel.app';
+        
+        const isOriginMismatch =
+          gisError?.isOriginMismatch ||
+          gisError?.code === 'origin_mismatch' ||
+          gisError?.message?.includes('origin_mismatch') ||
+          gisError?.message?.includes('origin');
 
-      const domain = typeof window !== 'undefined' ? window.location.hostname : 'este domínio';
+        const customErr: any = new Error(
+          `Erro 400: origin_mismatch - A origem "${origin}" não está cadastrada nas Origens JavaScript Autorizadas do Google Cloud.`
+        );
+        customErr.code = isOriginMismatch ? 'origin_mismatch' : 'auth/unauthorized-domain';
+        customErr.domain = hostname;
+        customErr.origin = origin;
+        customErr.isOriginMismatch = true;
+        customErr.isUnauthorizedDomain = true;
+        throw customErr;
+      }
+    }
+
+    const isOriginErr =
+      error?.code === 'origin_mismatch' ||
+      error?.message?.includes('origin_mismatch') ||
+      error?.message?.includes('origin');
+
+    if (isOriginErr) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://controledelocacao.vercel.app';
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : 'controledelocacao.vercel.app';
       const customErr: any = new Error(
-        `O domínio "${domain}" não está na lista de domínios autorizados do Google Cloud/Firebase.`
+        `Erro 400: origin_mismatch - A origem "${origin}" precisa ser registrada no Google Cloud Console.`
       );
-      customErr.code = 'auth/unauthorized-domain';
-      customErr.domain = domain;
-      customErr.isUnauthorizedDomain = true;
+      customErr.code = 'origin_mismatch';
+      customErr.domain = hostname;
+      customErr.origin = origin;
+      customErr.isOriginMismatch = true;
       throw customErr;
     }
 
