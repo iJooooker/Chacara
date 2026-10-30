@@ -258,6 +258,7 @@ export default function App() {
         onClose={() => setIsReservationModalOpen(false)}
         onSave={handleSaveReservation}
         initialData={editingReservation}
+        settings={settings}
       />
 
       <ExpenseModal

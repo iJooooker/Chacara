@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
-import { Reservation, PaymentStatus, ReservationStatus } from '../../types';
+import { Reservation, PaymentStatus, ReservationStatus, ChacaraDetails } from '../../types';
 import { calculateDaysBetween, formatCurrency } from '../../utils/formatters';
-import { Calendar, User, Phone, Users, DollarSign, FileText, AlertCircle } from 'lucide-react';
+import { Calendar, User, Phone, Users, DollarSign, FileText, AlertCircle, Sparkles } from 'lucide-react';
+import { generateGoogleCalendarWebLink } from '../../services/googleCalendarService';
 
 interface ReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>) => void;
   initialData?: Reservation | null;
+  settings?: ChacaraDetails;
 }
 
 export const ReservationModal: React.FC<ReservationModalProps> = ({
@@ -16,6 +18,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
   onClose,
   onSave,
   initialData,
+  settings,
 }) => {
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
@@ -29,6 +32,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
   const [status, setStatus] = useState<ReservationStatus>('confirmed');
   const [contractNotes, setContractNotes] = useState('');
   const [depositDate, setDepositDate] = useState('');
+  const [syncWithGoogle, setSyncWithGoogle] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
@@ -119,7 +123,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
     const calculatedRemaining = Math.max(0, totalAmount - amountPaid);
     const calculatedDailyRate = daysStay > 0 ? Math.round(Number(totalAmount) / daysStay) : Number(totalAmount);
 
-    onSave({
+    const reservationPayload = {
       client_name: clientName.trim(),
       client_phone: clientPhone.trim(),
       client_document: clientDocument.trim() || undefined,
@@ -134,7 +138,32 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       status: status,
       contract_notes: contractNotes.trim() || undefined,
       deposit_date: depositDate || undefined,
-    });
+    };
+
+    onSave(reservationPayload);
+
+    if (syncWithGoogle) {
+      const dummyRes: Reservation = {
+        id: initialData?.id || 'temp',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...reservationPayload,
+      };
+      const fallbackSettings: ChacaraDetails = settings || {
+        name: 'Chácara Recanto da Paz',
+        caretaker_name: 'Marcos Caseiro',
+        caretaker_phone: '(19) 98765-4321',
+        daily_rate_default: 1000,
+        cleaning_fee_default: 150,
+        max_guests: 25,
+        location: 'Estrada das Palmeiras, km 4 - Paulínia/SP',
+        check_in_time: '09:00',
+        check_out_time: '21:00',
+      };
+      const webLink = generateGoogleCalendarWebLink(dummyRes, fallbackSettings);
+      window.open(webLink, '_blank');
+    }
+
     onClose();
   };
 
@@ -371,6 +400,25 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
             onChange={(e) => setContractNotes(e.target.value)}
             className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-sans"
           />
+        </div>
+
+        {/* Sincronização Automática com Google Agenda */}
+        <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+          <label className="flex items-center space-x-2.5 text-xs font-semibold text-emerald-950 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={syncWithGoogle}
+              onChange={(e) => setSyncWithGoogle(e.target.checked)}
+              className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+            />
+            <span className="flex items-center">
+              <Calendar className="w-4 h-4 mr-1.5 text-emerald-700" />
+              <span>Sincronizar com a Google Agenda ao salvar (abre o evento pronto com 1 clique)</span>
+            </span>
+          </label>
+          <span className="text-[10px] bg-emerald-200/80 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+            Automático
+          </span>
         </div>
 
         {/* Botoes de Ação */}

@@ -29,6 +29,7 @@ import {
   Clock,
   Eye,
   FileCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { CalendarGrid } from './CalendarGrid';
 import { generateGoogleCalendarWebLink } from '../../services/googleCalendarService';
@@ -56,7 +57,7 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
   onOpenWhatsApp,
   onOpenGoogleCalendar,
 }) => {
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'google-calendar'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
@@ -151,6 +152,19 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
               <Calendar className="w-3.5 h-3.5 mr-1.5" />
               <span>Calendário Mensal</span>
             </button>
+            <button
+              id="btn-view-google-embed"
+              type="button"
+              onClick={() => setViewMode('google-calendar')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center transition-all cursor-pointer ${
+                viewMode === 'google-calendar'
+                  ? 'bg-white text-emerald-800 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+              <span>Google Agenda (Ao Vivo)</span>
+            </button>
           </div>
 
           {onOpenGoogleCalendar && (
@@ -225,6 +239,49 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
           onSelectReservation={(res) => onEditReservation(res)}
           onSelectDateForNewReservation={(dateStr) => onOpenNewModal(dateStr)}
         />
+      ) : viewMode === 'google-calendar' ? (
+        <div className="bg-white rounded-xl border border-stone-200 shadow-xs p-4 sm:p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-stone-100 pb-3">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                  Google Agenda Oficial (claudemirjappa@gmail.com)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Visualização oficial em tempo real da sua Google Agenda com todas as suas datas e compromissos.
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              {onOpenGoogleCalendar && (
+                <button
+                  type="button"
+                  onClick={onOpenGoogleCalendar}
+                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Sincronizar Reservas (.ics)
+                </button>
+              )}
+              <a
+                href="https://calendar.google.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-slate-700 border border-stone-200 rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center"
+              >
+                <span>Abrir no Google Calendar</span>
+                <ExternalLink className="w-3 h-3 ml-1.5 text-slate-500" />
+              </a>
+            </div>
+          </div>
+          <div className="w-full overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xs">
+            <iframe
+              src="https://calendar.google.com/calendar/embed?src=claudemirjappa%40gmail.com&ctz=America%2FSao_Paulo"
+              title="Google Agenda Claudemir"
+              className="w-full h-[650px] border-0"
+            />
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
           {/* Filters & Search Header */}
