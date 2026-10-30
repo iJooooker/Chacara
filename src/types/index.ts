@@ -17,6 +17,8 @@ export interface Reservation {
   status: ReservationStatus;
   contract_notes?: string;
   deposit_date?: string;
+  google_calendar_event_id?: string;
+  last_synced_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -86,4 +88,5 @@ export interface ChacaraDetails {
   caretaker_name: string;
   caretaker_phone: string;
   quiet_hours: string;
+  google_calendar_ical_url?: string;
 }

@@ -20,6 +20,7 @@ interface HeaderProps {
   onOpenNewExpense: () => void;
   onOpenSettings: () => void;
   onOpenPartnerReport: () => void;
+  onOpenGoogleCalendar: () => void;
   settings: ChacaraDetails;
   pendingCheckinsCount: number;
   isSyncing?: boolean;
@@ -32,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewExpense,
   onOpenSettings,
   onOpenPartnerReport,
+  onOpenGoogleCalendar,
   settings,
   pendingCheckinsCount,
   isSyncing,
@@ -70,6 +72,17 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Quick Actions Buttons */}
           <div className="flex items-center space-x-2 sm:space-x-2.5">
+            <button
+              id="btn-google-calendar-header"
+              type="button"
+              onClick={onOpenGoogleCalendar}
+              className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-100 bg-emerald-900/80 hover:bg-emerald-800 rounded-lg transition-colors border border-emerald-800 cursor-pointer shadow-2xs"
+              title="Sincronizar com Google Agenda"
+            >
+              <Calendar className="w-3.5 h-3.5 mr-1.5 text-emerald-300" />
+              <span>Google Agenda</span>
+            </button>
+
             <button
               id="btn-partner-report"
               type="button"

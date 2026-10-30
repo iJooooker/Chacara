@@ -233,6 +233,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Link iCal Privado da Agenda do Google (.ics)</span>
+                  <span className="text-[10px] text-emerald-700 font-normal">Sincronização Ativa</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.google_calendar_ical_url || ''}
+                  onChange={(e) => handleChange('google_calendar_ical_url', e.target.value)}
+                  placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+                  className="w-full px-3 py-1.5 text-xs font-mono bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-700"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  URL da agenda Google utilizada para ler e cruzar eventos de calendário no celular.
+                </p>
+              </div>
             </div>
           </div>
 

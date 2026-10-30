@@ -31,6 +31,7 @@ import {
   FileCheck,
 } from 'lucide-react';
 import { CalendarGrid } from './CalendarGrid';
+import { generateGoogleCalendarWebLink } from '../../services/googleCalendarService';
 
 interface ReservationsModuleProps {
   reservations: Reservation[];
@@ -41,6 +42,7 @@ interface ReservationsModuleProps {
   onOpenNewModal: (prefilledDate?: string) => void;
   onEditReservation: (res: Reservation) => void;
   onOpenWhatsApp: (res: Reservation) => void;
+  onOpenGoogleCalendar?: () => void;
 }
 
 export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
@@ -52,6 +54,7 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
   onOpenNewModal,
   onEditReservation,
   onOpenWhatsApp,
+  onOpenGoogleCalendar,
 }) => {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [searchTerm, setSearchTerm] = useState('');
@@ -149,6 +152,20 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
               <span>Calendário Mensal</span>
             </button>
           </div>
+
+          {onOpenGoogleCalendar && (
+            <button
+              id="btn-sync-gcal-module"
+              type="button"
+              onClick={onOpenGoogleCalendar}
+              className="px-3 py-2 bg-white hover:bg-stone-100 text-slate-700 border border-stone-300 rounded-lg text-xs sm:text-sm font-semibold shadow-2xs flex items-center transition-all cursor-pointer"
+              title="Sincronizar reservas com Google Agenda"
+            >
+              <Calendar className="w-4 h-4 mr-1.5 text-emerald-700" />
+              <span className="hidden sm:inline">Google Agenda</span>
+              <span className="sm:hidden">Agenda</span>
+            </button>
+          )}
 
           <button
             id="btn-add-reservation-top"
@@ -386,6 +403,18 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
                               >
                                 <MessageCircle className="w-4 h-4" />
                               </button>
+
+                              {/* Google Calendar Link */}
+                              <a
+                                id={`btn-table-gcal-${res.id}`}
+                                href={generateGoogleCalendarWebLink(res, settings)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
+                                title="Abrir / Adicionar evento na Google Agenda"
+                              >
+                                <Calendar className="w-4 h-4" />
+                              </a>
 
                               {/* Quick checkin / checkout progress */}
                               {res.status === 'confirmed' && (

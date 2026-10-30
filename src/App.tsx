@@ -11,6 +11,7 @@ import { ExpenseModal } from './components/expenses/ExpenseModal';
 import { WhatsAppModal } from './components/reservations/WhatsAppModal';
 import { PartnerReportModal } from './components/expenses/PartnerReportModal';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { GoogleCalendarSyncModal } from './components/calendar/GoogleCalendarSyncModal';
 import { Reservation, Expense } from './types';
 import { isSupabaseConfigured } from './services/supabaseClient';
 import { CheckCircle2, Trees, Database, RefreshCw, HardDrive } from 'lucide-react';
@@ -56,6 +57,7 @@ export default function App() {
 
   const [isPartnerReportOpen, setIsPartnerReportOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isGoogleCalendarOpen, setIsGoogleCalendarOpen] = useState(false);
 
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -146,6 +148,7 @@ export default function App() {
         onOpenNewExpense={handleOpenNewExpense}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenPartnerReport={() => setIsPartnerReportOpen(true)}
+        onOpenGoogleCalendar={() => setIsGoogleCalendarOpen(true)}
         settings={settings}
         pendingCheckinsCount={pendingCheckinsCount}
         isSyncing={isSyncing}
@@ -187,6 +190,7 @@ export default function App() {
                 onOpenNewModal={handleOpenNewReservation}
                 onEditReservation={handleEditReservation}
                 onOpenWhatsApp={handleOpenWhatsApp}
+                onOpenGoogleCalendar={() => setIsGoogleCalendarOpen(true)}
               />
             )}
 
@@ -287,6 +291,15 @@ export default function App() {
         onResetToMock={resetToMock}
         onExportData={exportAllData}
         onImportData={importData}
+      />
+
+      <GoogleCalendarSyncModal
+        isOpen={isGoogleCalendarOpen}
+        onClose={() => setIsGoogleCalendarOpen(false)}
+        reservations={reservations}
+        settings={settings}
+        onUpdateReservation={updateReservation}
+        onSaveSettings={updateSettings}
       />
     </div>
   );

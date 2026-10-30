@@ -14,6 +14,7 @@ export const INITIAL_CHACARA_DETAILS: ChacaraDetails = {
   caretaker_name: 'Claudemir Junior',
   caretaker_phone: '19999505223',
   quiet_hours: 'Som moderado após as 22h00 conforme lei do silêncio municipal.',
+  google_calendar_ical_url: 'https://calendar.google.com/calendar/ical/claudemirjappa%40gmail.com/private-2ed0c9f86539a0e24ed962b6adc9af35/basic.ics',
 };
 
 export const INITIAL_RESERVATIONS: Reservation[] = [

@@ -493,6 +493,8 @@ export const SupabaseService = {
         caretaker_name: data.caretaker_name,
         caretaker_phone: data.caretaker_phone,
         quiet_hours: data.quiet_hours,
+        google_calendar_ical_url:
+          data.google_calendar_ical_url || INITIAL_CHACARA_DETAILS.google_calendar_ical_url,
       };
 
       StorageService.saveSettings(settings);
