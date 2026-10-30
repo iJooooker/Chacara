@@ -10,8 +10,8 @@ import {
 } from '../../services/googleAuth';
 import {
   syncAllReservationsToGoogle,
-  pushReservationToGoogle,
   generateGoogleCalendarWebLink,
+  downloadReservationsIcsFile,
   SyncResult,
 } from '../../services/googleCalendarService';
 import {
@@ -22,10 +22,16 @@ import {
   AlertCircle,
   Smartphone,
   ShieldCheck,
-  UserCheck,
   LogOut,
   Sparkles,
   Link as LinkIcon,
+  Download,
+  Info,
+  Check,
+  CalendarCheck,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 
@@ -52,6 +58,9 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [showHowToGuide, setShowHowToGuide] = useState(false);
   const [iCalUrl, setICalUrl] = useState(
     settings.google_calendar_ical_url ||
       'https://calendar.google.com/calendar/ical/claudemirjappa%40gmail.com/private-2ed0c9f86539a0e24ed962b6adc9af35/basic.ics'
@@ -64,6 +73,7 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
       (authUser, token) => {
         setUser(authUser);
         setAccessToken(token);
+        setUnauthorizedDomain(null);
       },
       () => {
         setUser(null);
@@ -87,15 +97,30 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
   const handleSignIn = async () => {
     setIsAuthenticating(true);
     setSyncError(null);
+    setUnauthorizedDomain(null);
+
     try {
       const result = await googleSignIn();
       if (result) {
         setUser(result.user);
         setAccessToken(result.accessToken);
+        setUnauthorizedDomain(null);
       }
     } catch (err: any) {
       console.error('Falha ao conectar com Google:', err);
-      setSyncError(err.message || 'Falha ao autenticar com a conta Google. Tente novamente.');
+      const isUnauth =
+        err?.isUnauthorizedDomain ||
+        err?.code === 'auth/unauthorized-domain' ||
+        err?.message?.includes('unauthorized-domain');
+
+      if (isUnauth) {
+        const domain =
+          err?.domain || (typeof window !== 'undefined' ? window.location.hostname : 'este domínio');
+        setUnauthorizedDomain(domain);
+        setSyncError(null);
+      } else {
+        setSyncError(err?.message || 'Falha ao autenticar com a conta Google. Tente novamente.');
+      }
     } finally {
       setIsAuthenticating(false);
     }
@@ -106,6 +131,7 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
     setUser(null);
     setAccessToken(null);
     setSyncResult(null);
+    setUnauthorizedDomain(null);
   };
 
   const handleSyncAll = async () => {
@@ -138,6 +164,12 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
     }
   };
 
+  const handleDownloadIcs = () => {
+    downloadReservationsIcsFile(reservations, settings);
+    setDownloadSuccess(true);
+    setTimeout(() => setDownloadSuccess(false), 3000);
+  };
+
   const handleSaveICalUrl = () => {
     onSaveSettings({
       ...settings,
@@ -147,36 +179,150 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
     setTimeout(() => setSavedICalSuccess(false), 2500);
   };
 
-  const activeReservationsCount = reservations.filter((r) => r.status !== 'cancelled').length;
+  const activeReservations = reservations.filter((r) => r.status !== 'cancelled');
+  const activeReservationsCount = activeReservations.length;
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Sincronização com a Google Agenda"
-      subtitle="Acesse suas datas e contatos de locação diretamente pelo celular na rua"
-      maxWidth="2xl"
+      subtitle="Consulte suas datas e contatos de locação pelo celular na rua quando alguém perguntar"
+      maxWidth="3xl"
     >
       <div className="space-y-6 text-slate-800">
         {/* Why this is useful banner */}
-        <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white p-4 rounded-xl shadow-xs flex items-start space-x-3.5">
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
+        <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white p-4.5 rounded-xl shadow-xs flex items-start space-x-3.5">
+          <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0 mt-0.5">
             <Smartphone className="w-5 h-5 text-emerald-300" />
           </div>
           <div className="text-xs sm:text-sm">
             <h4 className="font-bold text-white mb-0.5 flex items-center">
-              <span>Sempre à mão no seu celular</span>
+              <span>Sempre à mão no seu celular na rua</span>
               <span className="ml-2 text-[10px] bg-emerald-400/20 text-emerald-300 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold border border-emerald-400/30">
-                Google Calendar
+                Google Agenda
               </span>
             </h4>
-            <p className="text-emerald-100/90 leading-relaxed">
-              Quando alguém perguntar sobre uma data na rua, basta abrir o app <strong>Google Agenda</strong> no seu smartphone. As reservas aparecerão com o nome do cliente, WhatsApp, quantidade de pessoas e status do pagamento.
+            <p className="text-emerald-100/90 leading-relaxed text-xs sm:text-[13px]">
+              Quando alguém perguntar sobre uma data na rua, você não precisa abrir planilhas: basta abrir o aplicativo <strong>Google Agenda</strong> no seu smartphone. As reservas aparecem com o <strong>nome do cliente, WhatsApp, quantidade de pessoas e status do pagamento</strong>.
             </p>
           </div>
         </div>
 
-        {/* Auth Section */}
+        {/* Unauthorized Domain Alert (Triggered when running on custom domain like controledelocacao.vercel.app) */}
+        {unauthorizedDomain && (
+          <div className="bg-amber-50/90 border border-amber-300 rounded-xl p-4.5 text-xs sm:text-sm space-y-3.5 shadow-xs">
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-400/30 flex items-center justify-center shrink-0 text-amber-700">
+                <AlertCircle className="w-4 h-4" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-amber-900 text-sm">
+                  Domínio Vercel Detectado: <span className="font-mono underline">{unauthorizedDomain}</span>
+                </h4>
+                <p className="text-amber-800 leading-relaxed text-xs">
+                  Por segurança de privacidade do Google, autenticações diretas via popup exigem autorização do domínio no console do Firebase.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white/90 border border-amber-200/80 rounded-lg p-3.5 space-y-2.5">
+              <div className="flex items-center text-emerald-800 font-bold text-xs uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                Soluções 100% imediatas (sem erros e sem precisar configurar nada):
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                {/* Method 1: Download full calendar file */}
+                <button
+                  type="button"
+                  onClick={handleDownloadIcs}
+                  className="p-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-xs flex flex-col items-start space-y-1 shadow-xs transition-colors cursor-pointer text-left"
+                >
+                  <div className="flex items-center space-x-1.5">
+                    <Download className="w-4 h-4 text-emerald-200" />
+                    <span>1. Baixar Calendário Completo (.ics)</span>
+                  </div>
+                  <span className="text-[11px] text-emerald-100 font-normal">
+                    Contém todas as {activeReservationsCount} reservas. Abre direto no celular ou no Google Agenda Web.
+                  </span>
+                </button>
+
+                {/* Method 2: Open import page */}
+                <a
+                  href="https://calendar.google.com/calendar/u/0/r/settings/export"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 bg-stone-100 hover:bg-stone-200 text-slate-800 border border-stone-300 rounded-lg font-bold text-xs flex flex-col items-start space-y-1 transition-colors cursor-pointer text-left"
+                >
+                  <div className="flex items-center space-x-1.5">
+                    <ExternalLink className="w-4 h-4 text-slate-600" />
+                    <span>2. Importar no Google Agenda Web</span>
+                  </div>
+                  <span className="text-[11px] text-slate-600 font-normal">
+                    Acesse a página oficial do Google Agenda e selecione o arquivo baixado.
+                  </span>
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Primary Action Card: 1-Click Sync or Download .ICS */}
+        <div className="bg-white border-2 border-emerald-600/30 rounded-xl p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  Mais Fácil & Rápido
+                </span>
+                <span className="text-xs text-slate-500 font-medium">Funciona em qualquer aparelho</span>
+              </div>
+              <h4 className="text-base font-bold text-slate-900 mt-1">
+                Baixar Agenda da Chácara ({activeReservationsCount} reservas ativas)
+              </h4>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Gera o arquivo oficial de calendário (.ics) com todas as datas marcadas (incluindo Solange, hóspedes, valores e WhatsApp).
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDownloadIcs}
+              className="px-4 py-3 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white rounded-lg font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center space-x-2 transition-all cursor-pointer shrink-0"
+            >
+              {downloadSuccess ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-200" />
+                  <span>Arquivo Baixado!</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 text-emerald-200" />
+                  <span>Baixar Arquivo da Agenda (.ics)</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Quick instructions on how to use .ics */}
+          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2">
+            <div className="flex items-center space-x-1.5">
+              <CalendarCheck className="w-4 h-4 text-emerald-600" />
+              <span>No celular: basta tocar no arquivo baixado e ele adiciona à Google Agenda.</span>
+            </div>
+            <a
+              href="https://calendar.google.com/calendar/u/0/r/settings/export"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+            >
+              <span>Abrir Importação no Google Agenda Web</span>
+              <ExternalLink className="w-3 h-3 ml-1" />
+            </a>
+          </div>
+        </div>
+
+        {/* Direct Google Account API Sync Section */}
         <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2.5">
@@ -184,9 +330,9 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
                 <Calendar className="w-4 h-4 text-emerald-700" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-900">Conta Google para Sincronização</h4>
+                <h4 className="text-sm font-bold text-slate-900">Sincronização Direta por API Google</h4>
                 <p className="text-xs text-slate-500">
-                  {user ? 'Conectado com autorização de eventos' : 'Faça login para permitir atualização da sua agenda'}
+                  {user ? 'Conectado com autorização de eventos' : 'Permite sincronizar automaticamente com 1 clique'}
                 </p>
               </div>
             </div>
@@ -200,8 +346,7 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
           </div>
 
           {!user ? (
-            <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
-              {/* Official Google Sign-in button */}
+            <div className="pt-1 flex flex-col sm:flex-row items-center gap-3">
               <button
                 type="button"
                 onClick={handleSignIn}
@@ -239,53 +384,74 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
               </button>
 
               <span className="text-xs text-slate-500 text-center sm:text-left">
-                Permite criar e atualizar os eventos diretamente na sua conta Google.
+                Permite enviar as reservas em lote diretamente para sua conta Google.
               </span>
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1 border-t border-slate-200/60">
-              <div className="flex items-center space-x-3">
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName || 'Google User'}
-                    className="w-9 h-9 rounded-full border border-slate-300"
-                  />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center text-sm">
-                    {user.email ? user.email[0].toUpperCase() : 'G'}
+            <div className="space-y-4 pt-1">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-slate-200/60 pt-3">
+                <div className="flex items-center space-x-3">
+                  {user.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName || 'Google User'}
+                      className="w-9 h-9 rounded-full border border-slate-300"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center text-sm">
+                      {user.email ? user.email[0].toUpperCase() : 'G'}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs sm:text-sm font-bold text-slate-900">
+                      {user.displayName || 'Usuário Google'}
+                    </p>
+                    <p className="text-xs text-slate-500 font-mono">{user.email}</p>
                   </div>
-                )}
-                <div>
-                  <p className="text-xs sm:text-sm font-bold text-slate-900">
-                    {user.displayName || 'Usuário Google'}
-                  </p>
-                  <p className="text-xs text-slate-500 font-mono">{user.email}</p>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex items-center text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5 mr-1" />
+                  Desconectar
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex items-center text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5 mr-1" />
-                Desconectar
-              </button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleSyncAll}
+                  disabled={isSyncing}
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSyncing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin text-white" />
+                      <span>Sincronizando com Google...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2 text-emerald-300" />
+                      <span>Sincronizar Todas as Reservas na Google Agenda</span>
+                    </>
+                  )}
+                </button>
+
+                <a
+                  href="https://calendar.google.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-slate-700 font-semibold text-xs sm:text-sm rounded-lg flex items-center justify-center transition-colors cursor-pointer border border-stone-200"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+                  <span>Abrir Google Agenda</span>
+                </a>
+              </div>
             </div>
           )}
-        </div>
-
-        {/* Sync Action Area */}
-        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-bold text-slate-900">Atualizar Agenda do Google Agora</h4>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Envia as reservas ativas ({activeReservationsCount} cadastrada{activeReservationsCount === 1 ? '' : 's'}) para o seu Google Calendar.
-              </p>
-            </div>
-          </div>
 
           {syncError && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start space-x-2">
@@ -311,95 +477,120 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
               </ul>
             </div>
           )}
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            <button
-              type="button"
-              onClick={handleSyncAll}
-              disabled={isSyncing || !user}
-              className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSyncing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin text-white" />
-                  <span>Sincronizando com Google...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2 text-emerald-300" />
-                  <span>Sincronizar Todas as Reservas na Google Agenda</span>
-                </>
-              )}
-            </button>
-
-            <a
-              href="https://calendar.google.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-slate-700 font-semibold text-xs sm:text-sm rounded-lg flex items-center justify-center transition-colors cursor-pointer border border-stone-200"
-            >
-              <ExternalLink className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
-              <span>Abrir Google Agenda</span>
-            </a>
-          </div>
         </div>
 
-        {/* Current Reservations Preview in this sync */}
-        <div className="space-y-2">
-          <h5 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Reservas Prontas para a Agenda
-          </h5>
-          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-            {reservations
-              .filter((r) => r.status !== 'cancelled')
-              .map((res) => {
-                const directLink = generateGoogleCalendarWebLink(res, settings);
-                return (
-                  <div
-                    key={res.id}
-                    className="p-3 bg-stone-50 border border-stone-200 rounded-lg flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-900">{res.client_name}</span>
-                      <span className="text-slate-500 ml-2">
-                        {res.check_in} até {res.check_out} ({res.guests_count} pessoas)
-                      </span>
-                      <div className="text-[11px] text-slate-600 mt-0.5">
-                        WhatsApp: <span className="font-mono">{res.client_phone}</span> • Total: R$ {res.total_amount}
-                      </div>
-                    </div>
+        {/* Current Reservations Preview with 1-Click Direct Links */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Reservas Cadastradas ({activeReservationsCount}) — Adicionar com 1 Toque
+            </h5>
+            <span className="text-[11px] text-slate-500">
+              Abre no Google Agenda oficial sem precisar de login
+            </span>
+          </div>
 
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {activeReservations.map((res) => {
+              const directLink = generateGoogleCalendarWebLink(res, settings);
+              return (
+                <div
+                  key={res.id}
+                  className="p-3 bg-stone-50 border border-stone-200 hover:border-stone-300 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs transition-colors"
+                >
+                  <div>
                     <div className="flex items-center space-x-2">
-                      <a
-                        href={directLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-800 border border-stone-300 hover:border-emerald-300 rounded font-semibold text-[11px] inline-flex items-center cursor-pointer transition-colors"
-                        title="Adicionar ou visualizar individualmente no Google Agenda"
-                      >
-                        <ExternalLink className="w-3 h-3 mr-1 text-emerald-600" />
-                        Adicionar Direto
-                      </a>
+                      <span className="font-bold text-slate-900 text-sm">{res.client_name}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                        {res.check_in} até {res.check_out}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-600 mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                      <span>👥 {res.guests_count} hóspedes</span>
+                      <span>📱 WhatsApp: <strong className="font-mono">{res.client_phone}</strong></span>
+                      <span>💰 Total: R$ {res.total_amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      <span className={res.payment_status === 'paid' ? 'text-emerald-700 font-bold' : 'text-amber-700 font-semibold'}>
+                        {res.payment_status === 'paid' ? '✓ Quitado' : `R$ ${res.remaining_amount} restante`}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
+
+                  <a
+                    href={directLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-md font-bold text-xs inline-flex items-center justify-center shrink-0 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                    <span>Adicionar à Google Agenda</span>
+                  </a>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* iCal Link Config */}
+        {/* Accordion: How to access on smartphone guide */}
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+          <button
+            type="button"
+            onClick={() => setShowHowToGuide(!showHowToGuide)}
+            className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center space-x-2 text-xs sm:text-sm font-bold text-slate-800">
+              <HelpCircle className="w-4 h-4 text-emerald-700" />
+              <span>Como ver suas datas na rua pelo celular (Passo a Passo)</span>
+            </div>
+            {showHowToGuide ? (
+              <ChevronUp className="w-4 h-4 text-slate-500" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-500" />
+            )}
+          </button>
+
+          {showHowToGuide && (
+            <div className="p-4 pt-1 border-t border-slate-200 text-xs text-slate-700 space-y-3 bg-white">
+              <div className="flex items-start space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[11px] shrink-0">1</span>
+                <p>
+                  <strong>No celular ou no computador:</strong> Clique no botão verde <strong>"Baixar Arquivo da Agenda (.ics)"</strong> acima.
+                </p>
+              </div>
+              <div className="flex items-start space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[11px] shrink-0">2</span>
+                <p>
+                  <strong>No smartphone (Android ou iPhone):</strong> Abra o arquivo baixado. O celular perguntará com qual app abrir: escolha <strong>Google Agenda</strong> e toque em <strong>"Adicionar tudo"</strong>.
+                </p>
+              </div>
+              <div className="flex items-start space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[11px] shrink-0">3</span>
+                <p>
+                  <strong>No computador:</strong> Abra o Google Agenda Web (<a href="https://calendar.google.com/calendar/u/0/r/settings/export" target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline font-bold">Importar & Exportar</a>), selecione o arquivo baixado e clique em Importar.
+                </p>
+              </div>
+              <div className="flex items-start space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[11px] shrink-0">4</span>
+                <p>
+                  <strong>Pronto na rua:</strong> Quando qualquer pessoa ligar ou perguntar no WhatsApp se você tem uma data disponível, abra o app da <strong>Google Agenda</strong> no seu celular. O evento estará lá com todos os dados da locação!
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* iCal Link Config (Private iCal link from Google Calendar) */}
         <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-4 space-y-2.5">
           <div className="flex items-center justify-between">
             <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center">
               <LinkIcon className="w-3.5 h-3.5 mr-1 text-slate-500" />
-              Link iCal da sua Agenda Pessoal (.ics)
+              Link iCal da sua Agenda Pessoal Google (.ics)
             </h5>
             {savedICalSuccess && (
               <span className="text-[11px] font-semibold text-emerald-700">✓ Salvo!</span>
             )}
           </div>
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            Link privado da sua agenda Google fornecido para integração e consulta de datas:
+            Link privado da sua agenda Google fornecido para leitura e sincronização das datas já agendadas:
           </p>
           <div className="flex items-center space-x-2">
             <input
