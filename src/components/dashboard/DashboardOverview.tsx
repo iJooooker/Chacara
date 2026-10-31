@@ -17,6 +17,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { Reservation, Expense, Checklist, ChacaraDetails } from '../../types';
+import { MonthlyRevenueChart } from './MonthlyRevenueChart';
 import {
   formatCurrency,
   formatDate,
@@ -245,6 +246,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Gráfico de Faturamento Mensal (Recharts) */}
+      <MonthlyRevenueChart reservations={reservations} />
 
       {/* ALERTAS RÁPIDOS & PRÓXIMOS CHECK-INS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

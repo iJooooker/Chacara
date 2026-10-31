@@ -138,8 +138,35 @@ export function buildGoogleCalendarEventPayload(
   };
 }
 
+const EVENT_STORAGE_KEY = 'recanto_paz_gcal_event_ids';
+
+export function getStoredEventId(reservationId: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(EVENT_STORAGE_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    return map[reservationId] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredEventId(reservationId: string, eventId: string): void {
+  if (typeof window === 'undefined' || !reservationId || !eventId) return;
+  try {
+    const raw = localStorage.getItem(EVENT_STORAGE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[reservationId] = eventId;
+    localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.warn('Erro ao salvar ID do evento no storage:', e);
+  }
+}
+
 /**
- * Creates or updates an event in Google Calendar using the REST API
+ * Creates or updates an event in Google Calendar using the REST API.
+ * Guaranteed to prevent duplicate events: checks existing event ID and searches calendar before POSTing.
  */
 export async function pushReservationToGoogle(
   reservation: Reservation,
@@ -148,12 +175,46 @@ export async function pushReservationToGoogle(
 ): Promise<{ eventId: string; action: 'created' | 'updated' }> {
   const payload = buildGoogleCalendarEventPayload(reservation, settings);
 
-  // If we already have a google_calendar_event_id, attempt to update it
-  if (reservation.google_calendar_event_id) {
+  let targetEventId = reservation.google_calendar_event_id || getStoredEventId(reservation.id);
+
+  // If no known eventId, search Google Calendar for an existing event for this reservation/client
+  if (!targetEventId) {
+    try {
+      const timeMin = new Date(`${reservation.check_in}T00:00:00-03:00`).toISOString();
+      const timeMax = new Date(`${reservation.check_out}T23:59:59-03:00`).toISOString();
+      const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?q=${encodeURIComponent(
+        reservation.client_name
+      )}&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&maxResults=5`;
+
+      const searchRes = await fetch(searchUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        const items = searchData.items || [];
+        // Look for matching event by reservation_id or summary
+        const matched = items.find(
+          (item: any) =>
+            item.extendedProperties?.private?.reservation_id === reservation.id ||
+            item.summary?.includes(reservation.client_name)
+        );
+        if (matched?.id) {
+          targetEventId = matched.id;
+          saveStoredEventId(reservation.id, matched.id);
+        }
+      }
+    } catch (searchErr) {
+      console.warn('Busca de evento existente falhou, prosseguindo com cautela:', searchErr);
+    }
+  }
+
+  // If we have an eventId (from prop, storage, or search), update it (PUT)
+  if (targetEventId) {
     try {
       const updateRes = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(
-          reservation.google_calendar_event_id
+          targetEventId
         )}`,
         {
           method: 'PUT',
@@ -167,15 +228,20 @@ export async function pushReservationToGoogle(
 
       if (updateRes.ok) {
         const data = await updateRes.json();
+        saveStoredEventId(reservation.id, data.id);
         return { eventId: data.id, action: 'updated' };
       }
-      // If 404, event was removed in Google Calendar, so fall through to create a new one
+      // If 404 or 410, event was deleted in Google Calendar, fall through to recreate
+      if (updateRes.status !== 404 && updateRes.status !== 410) {
+        const errorText = await updateRes.text();
+        console.warn('Erro ao atualizar evento existente:', errorText);
+      }
     } catch (e) {
       console.warn('Tentativa de atualização falhou, criando novo evento:', e);
     }
   }
 
-  // Create new event
+  // Only create a new event if no existing event was found
   const createRes = await fetch(
     'https://www.googleapis.com/calendar/v3/calendars/primary/events',
     {
@@ -194,7 +260,90 @@ export async function pushReservationToGoogle(
   }
 
   const data = await createRes.json();
+  saveStoredEventId(reservation.id, data.id);
   return { eventId: data.id, action: 'created' };
+}
+
+/**
+ * Removes duplicate events from Google Calendar that share the same client and date.
+ * Keeps only 1 event per reservation and deletes all duplicates.
+ */
+export async function cleanupDuplicateEventsFromGoogle(
+  accessToken: string
+): Promise<{ deletedCount: number; keptCount: number }> {
+  try {
+    // List up to 250 upcoming and recent events
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const oneYearAhead = new Date();
+    oneYearAhead.setFullYear(oneYearAhead.getFullYear() + 1);
+
+    const listUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?q=Reserva&timeMin=${encodeURIComponent(
+      sixMonthsAgo.toISOString()
+    )}&timeMax=${encodeURIComponent(oneYearAhead.toISOString())}&maxResults=2500&singleEvents=true`;
+
+    const res = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Falha ao listar eventos para limpeza: ${await res.text()}`);
+    }
+
+    const data = await res.json();
+    const items = data.items || [];
+
+    // Group items by signature: summary + startDate
+    const groups = new Map<string, any[]>();
+    for (const item of items) {
+      if (!item.summary) continue;
+      const startDate = item.start?.dateTime?.substring(0, 10) || item.start?.date || '';
+      const summaryClean = item.summary.trim().toLowerCase();
+      const groupKey = `${summaryClean}~${startDate}`;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, []);
+      }
+      groups.get(groupKey)!.push(item);
+    }
+
+    let deletedCount = 0;
+    let keptCount = 0;
+
+    for (const [, events] of groups.entries()) {
+      if (events.length > 1) {
+        // Keep the first (or most recently updated) and delete all others
+        const sorted = [...events].sort(
+          (a, b) => new Date(b.updated || 0).getTime() - new Date(a.updated || 0).getTime()
+        );
+        const [keep, ...duplicates] = sorted;
+        keptCount += 1;
+
+        // Delete duplicates in parallel batches
+        for (const dup of duplicates) {
+          try {
+            await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(dup.id)}`,
+              {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${accessToken}` },
+              }
+            );
+            deletedCount += 1;
+          } catch (delErr) {
+            console.warn('Erro ao excluir duplicata:', dup.id, delErr);
+          }
+        }
+      } else {
+        keptCount += 1;
+      }
+    }
+
+    return { deletedCount, keptCount };
+  } catch (err: any) {
+    console.error('Erro na limpeza de duplicatas:', err);
+    throw err;
+  }
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   syncAllReservationsToGoogle,
   generateGoogleCalendarWebLink,
   downloadReservationsIcsFile,
+  cleanupDuplicateEventsFromGoogle,
   SyncResult,
 } from '../../services/googleCalendarService';
 import {
@@ -37,6 +38,7 @@ import {
   Copy,
   Key,
   ShieldAlert,
+  Trash2,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 
@@ -79,6 +81,8 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
       'https://calendar.google.com/calendar/ical/claudemirjappa%40gmail.com/private-2ed0c9f86539a0e24ed962b6adc9af35/basic.ics'
   );
   const [savedICalSuccess, setSavedICalSuccess] = useState(false);
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ deletedCount: number; keptCount: number } | null>(null);
 
   // Monitor auth state on mount
   useEffect(() => {
@@ -207,6 +211,27 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
       setSyncError(err.message || 'Ocorreu um erro ao enviar eventos para a Google Agenda.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleCleanupDuplicates = async () => {
+    if (!accessToken) {
+      setSyncError('Conecte sua conta Google antes de limpar duplicados.');
+      return;
+    }
+
+    setIsCleaningDuplicates(true);
+    setSyncError(null);
+    setCleanupResult(null);
+
+    try {
+      const res = await cleanupDuplicateEventsFromGoogle(accessToken);
+      setCleanupResult(res);
+    } catch (err: any) {
+      console.error('Erro ao limpar duplicados:', err);
+      setSyncError(err.message || 'Erro ao remover eventos duplicados do Google Calendar.');
+    } finally {
+      setIsCleaningDuplicates(false);
     }
   };
 
@@ -629,11 +654,11 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
                 </button>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-wrap">
                 <button
                   type="button"
                   onClick={handleSyncAll}
-                  disabled={isSyncing}
+                  disabled={isSyncing || isCleaningDuplicates}
                   className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
                 >
                   {isSyncing ? (
@@ -644,7 +669,27 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4 mr-2 text-emerald-300" />
-                      <span>Sincronizar Todas as Reservas na Google Agenda</span>
+                      <span>Sincronizar Todas as Reservas</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCleanupDuplicates}
+                  disabled={isCleaningDuplicates || isSyncing}
+                  className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold text-xs sm:text-sm rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
+                  title="Remove centenas de eventos repetidos da mesma data no Google Calendar"
+                >
+                  {isCleaningDuplicates ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin text-rose-700" />
+                      <span>Removendo repetidos...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-1.5 text-rose-600" />
+                      <span>Limpar Repetidos da Google Agenda</span>
                     </>
                   )}
                 </button>
@@ -659,6 +704,18 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
                   <span>Abrir Google Agenda</span>
                 </a>
               </div>
+            </div>
+          )}
+
+          {cleanupResult && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-lg text-xs text-emerald-900 space-y-1 animate-fade-in">
+              <div className="flex items-center font-bold text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 mr-1.5 text-emerald-600" />
+                <span>Limpeza de duplicatas concluída com sucesso!</span>
+              </div>
+              <p className="text-[11px] text-emerald-700">
+                Foram removidos <strong>{cleanupResult.deletedCount}</strong> evento(s) duplicados da sua Google Agenda. <strong>{cleanupResult.keptCount}</strong> evento(s) únicos foram preservados.
+              </p>
             </div>
           )}
 

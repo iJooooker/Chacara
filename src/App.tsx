@@ -64,10 +64,10 @@ export default function App() {
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = React.useCallback((msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
+    setTimeout(() => setToastMessage(null), 3500);
+  }, []);
 
   // Pending checkins count for badge
   const pendingCheckinsCount = useMemo(() => {

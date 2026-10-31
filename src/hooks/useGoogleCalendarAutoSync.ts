@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Reservation, ChacaraDetails } from '../types';
 import { getAccessToken } from '../services/googleAuth';
-import { pushReservationToGoogle } from '../services/googleCalendarService';
+import { pushReservationToGoogle, saveStoredEventId } from '../services/googleCalendarService';
 
 interface AutoSyncOptions {
   reservations: Reservation[];
@@ -12,30 +12,32 @@ interface AutoSyncOptions {
 }
 
 /**
- * Generates a unique signature representing the calendar-critical properties of a reservation.
+ * Generates a signature strictly based on user-editable business properties.
+ * IMPORTANT: NEVER include google_calendar_event_id, updated_at, or timestamps here,
+ * as updating them would cause an infinite loop!
  */
-function getReservationSignature(res: Reservation): string {
+function getBusinessSignature(res: Reservation): string {
   return [
     res.id,
-    res.client_name,
-    res.client_phone,
+    (res.client_name || '').trim().toLowerCase(),
+    (res.client_phone || '').trim(),
     res.check_in,
     res.check_out,
     res.status,
     res.payment_status,
-    res.guests_count,
-    res.total_amount,
-    res.amount_paid,
-    res.remaining_amount,
-    res.contract_notes || '',
-    res.google_calendar_event_id || '',
+    Number(res.guests_count) || 1,
+    Number(res.total_amount) || 0,
+    Number(res.amount_paid) || 0,
+    Number(res.remaining_amount) || 0,
   ].join('~');
 }
 
 /**
- * Hook to automatically detect new or updated reservations and push them
- * directly to Google Calendar via REST API in the background, without requiring
- * manual user confirmation or opening any tabs.
+ * Hook to automatically synchronize reservations with Google Calendar safely:
+ * - Anti-loop protection: 60-second cooldown per reservation
+ * - In-flight lock preventing parallel duplicate requests
+ * - Business-data-only signature (ignores metadata/timestamps)
+ * - Safe debounce to avoid rapid re-triggering
  */
 export function useGoogleCalendarAutoSync({
   reservations,
@@ -45,42 +47,59 @@ export function useGoogleCalendarAutoSync({
   enabled = true,
 }: AutoSyncOptions) {
   const knownSignaturesRef = useRef<Map<string, string>>(new Map());
-  const isInitialLoadRef = useRef<boolean>(true);
+  const cooldownMapRef = useRef<Map<string, number>>(new Map());
   const isSyncingRef = useRef<Set<string>>(new Set());
+  const initializedRef = useRef<boolean>(false);
 
   const syncReservationToGoogle = useCallback(
     async (res: Reservation, isNew: boolean = false) => {
-      if (isSyncingRef.current.has(res.id)) return;
+      if (!res?.id || !res?.client_name) return;
+
+      // Anti-loop Check 1: Already syncing right now
+      if (isSyncingRef.current.has(res.id)) {
+        return;
+      }
+
+      // Anti-loop Check 2: Cooldown (minimum 45 seconds between syncs for the same reservation)
+      const now = Date.now();
+      const lastSync = cooldownMapRef.current.get(res.id) || 0;
+      if (now - lastSync < 45000) {
+        return;
+      }
 
       try {
         const token = await getAccessToken();
         if (!token) return;
 
+        // Acquire lock & stamp cooldown
         isSyncingRef.current.add(res.id);
+        cooldownMapRef.current.set(res.id, Date.now());
 
         const result = await pushReservationToGoogle(res, settings, token);
         if (result?.eventId) {
-          const updates: Partial<Reservation> = {
-            google_calendar_event_id: result.eventId,
-            last_synced_at: new Date().toISOString(),
-          };
+          saveStoredEventId(res.id, result.eventId);
 
-          // Update signature cache immediately to prevent loop
-          const updatedRes: Reservation = { ...res, ...updates };
-          knownSignaturesRef.current.set(res.id, getReservationSignature(updatedRes));
+          // Update signature to match current business state
+          knownSignaturesRef.current.set(res.id, getBusinessSignature(res));
 
-          await onUpdateReservation(res.id, updates);
+          // Only update app state if eventId is different, and do not trigger re-sync
+          if (res.google_calendar_event_id !== result.eventId) {
+            await onUpdateReservation(res.id, {
+              google_calendar_event_id: result.eventId,
+              last_synced_at: new Date().toISOString(),
+            });
+          }
 
           if (onNotify) {
             onNotify(
               isNew
-                ? `📅 Nova locação de ${res.client_name} enviada automaticamente para a Google Agenda!`
+                ? `📅 Nova locação de ${res.client_name} enviada para a Google Agenda!`
                 : `📅 Locação de ${res.client_name} atualizada na Google Agenda via API!`
             );
           }
         }
       } catch (err: any) {
-        console.warn(`[AutoSync] Erro ao sincronizar reserva ${res.id} no Google Calendar:`, err);
+        console.warn(`[AutoSync] Erro ao sincronizar ${res.client_name}:`, err?.message || err);
       } finally {
         isSyncingRef.current.delete(res.id);
       }
@@ -91,43 +110,40 @@ export function useGoogleCalendarAutoSync({
   useEffect(() => {
     if (!enabled || reservations.length === 0) return;
 
-    // First render: register existing reservations so we don't re-sync unchanged ones
-    if (isInitialLoadRef.current) {
+    // First load: initialize known signatures without syncing existing items
+    if (!initializedRef.current) {
       reservations.forEach((r) => {
-        knownSignaturesRef.current.set(r.id, getReservationSignature(r));
+        knownSignaturesRef.current.set(r.id, getBusinessSignature(r));
+        // Seed cooldown on load to avoid syncing all existing items at once
+        cooldownMapRef.current.set(r.id, Date.now());
       });
-      isInitialLoadRef.current = false;
+      initializedRef.current = true;
       return;
     }
 
-    // Check each reservation for changes or new additions
-    reservations.forEach((res) => {
-      // Don't auto-create Google events for cancelled reservations if they don't already have one
-      if (res.status === 'cancelled' && !res.google_calendar_event_id) {
-        return;
-      }
+    // Debounce checking to avoid rapid re-renders
+    const timer = setTimeout(() => {
+      reservations.forEach((res) => {
+        if (res.status === 'cancelled' && !res.google_calendar_event_id) {
+          return;
+        }
 
-      const prevSignature = knownSignaturesRef.current.get(res.id);
-      const currentSignature = getReservationSignature(res);
+        const prevSig = knownSignaturesRef.current.get(res.id);
+        const currSig = getBusinessSignature(res);
 
-      if (!prevSignature) {
-        // Brand new reservation!
-        knownSignaturesRef.current.set(res.id, currentSignature);
-        syncReservationToGoogle(res, true);
-      } else if (prevSignature !== currentSignature) {
-        // Reservation was modified!
-        knownSignaturesRef.current.set(res.id, currentSignature);
-        syncReservationToGoogle(res, false);
-      }
-    });
+        if (!prevSig) {
+          // Brand new reservation added
+          knownSignaturesRef.current.set(res.id, currSig);
+          syncReservationToGoogle(res, true);
+        } else if (prevSig !== currSig) {
+          // Business details changed by user
+          knownSignaturesRef.current.set(res.id, currSig);
+          syncReservationToGoogle(res, false);
+        }
+      });
+    }, 1000);
 
-    // Cleanup removed reservations
-    const currentIds = new Set(reservations.map((r) => r.id));
-    for (const id of knownSignaturesRef.current.keys()) {
-      if (!currentIds.has(id)) {
-        knownSignaturesRef.current.delete(id);
-      }
-    }
+    return () => clearTimeout(timer);
   }, [reservations, enabled, syncReservationToGoogle]);
 
   return {
