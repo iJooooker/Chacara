@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../common/Modal';
 import { Reservation, PaymentStatus, ReservationStatus, ChacaraDetails } from '../../types';
-import { calculateDaysBetween, formatCurrency } from '../../utils/formatters';
+import { calculateDaysBetween, formatCurrency, getLocalDateString } from '../../utils/formatters';
 import {
   Calendar,
   User,
@@ -103,7 +103,6 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       const nextDayStr = `${nextY}-${nextM}-${nextD}`;
 
       const today = new Date();
-      const toIso = (d: Date) => d.toISOString().split('T')[0];
 
       setClientName('');
       setClientPhone('');
@@ -116,7 +115,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       setPaymentStatus('partially_paid');
       setStatus('confirmed');
       setContractNotes('');
-      setDepositDate(toIso(today));
+      setDepositDate(getLocalDateString(today));
     } else {
       // Default to next upcoming weekend
       const today = new Date();
@@ -125,20 +124,18 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       const nextSun = new Date(nextFri);
       nextSun.setDate(nextFri.getDate() + 2);
 
-      const toIso = (d: Date) => d.toISOString().split('T')[0];
-
       setClientName('');
       setClientPhone('');
       setClientDocument('');
-      setCheckIn(toIso(nextFri));
-      setCheckOut(toIso(nextSun));
+      setCheckIn(getLocalDateString(nextFri));
+      setCheckOut(getLocalDateString(nextSun));
       setGuestsCount(12);
       setTotalAmount(2200);
       setAmountPaid(1100);
       setPaymentStatus('partially_paid');
       setStatus('confirmed');
       setContractNotes('');
-      setDepositDate(toIso(today));
+      setDepositDate(getLocalDateString(today));
     }
     setErrorMessage('');
   }, [initialData, initialCheckIn, isOpen]);
@@ -257,7 +254,7 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={initialData ? 'Editar Locação por Temporada' : 'Cadastrar Nova Locação'}
-      subtitle="Chácara Recanto da Paz • Registro e contrato de locação"
+      subtitle={`${settings?.name || 'Chácara Solaris'} • Registro e contrato de locação`}
       maxWidth="3xl"
     >
       <form onSubmit={handleSubmit} noValidate className="space-y-5">

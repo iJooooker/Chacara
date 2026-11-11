@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { Reservation } from '../../types';
-import { formatDate, formatCurrency } from '../../utils/formatters';
+import { Reservation, ChacaraDetails } from '../../types';
+import { formatDate, formatCurrency, getLocalDateString } from '../../utils/formatters';
 import { ChevronLeft, ChevronRight, Users, MessageCircle, Calendar as CalendarIcon } from 'lucide-react';
 
 interface CalendarGridProps {
   reservations: Reservation[];
   onSelectReservation: (res: Reservation) => void;
   onSelectDateForNewReservation: (dateStr: string) => void;
+  settings?: ChacaraDetails;
 }
 
 export const CalendarGrid: React.FC<CalendarGridProps> = ({
   reservations,
   onSelectReservation,
   onSelectDateForNewReservation,
+  settings,
 }) => {
   // Current displayed month & year
   const [currentDate, setCurrentDate] = useState(() => {
@@ -102,7 +104,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     });
   }
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
 
   return (
     <div className="bg-white rounded-xl border border-stone-200 shadow-xs overflow-hidden">
@@ -117,7 +119,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               {monthNames[month]} de {year}
             </h3>
             <p className="text-[11px] text-slate-500">
-              Grade de ocupação da Chácara Recanto da Paz
+              Grade de ocupação da {settings?.name || 'Chácara'}
             </p>
           </div>
         </div>

@@ -140,7 +140,7 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
       <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
-        <title>${checklist.title} - ${settings.name || 'Recanto da Paz'}</title>
+        <title>${checklist.title} - ${settings.name || 'Chácara Solaris'}</title>
         <style>
           body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 32px; color: #1f2937; margin: 0; }
           .header { border-bottom: 2px solid #059669; padding-bottom: 16px; margin-bottom: 24px; }
@@ -163,7 +163,7 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
       </head>
       <body>
         <div class="header">
-          <h1 class="title">${settings.name || 'Chácara Recanto da Paz'}</h1>
+          <h1 class="title">${settings.name || 'Chácara Solaris'}</h1>
           <div class="subtitle">${checklist.title} ${checklist.description ? ` - ${checklist.description}` : ''}</div>
           <div class="meta">
             <span><strong>Responsável:</strong> ${checklist.assigned_to || 'Não informado'}</span>
@@ -200,7 +200,7 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
             Ciência e De acordo
           </div>
         </div>
-        <div class="footer">Documento gerado automaticamente pelo App Gestão Recanto da Paz</div>
+        <div class="footer">Documento gerado automaticamente pelo App Gestão ${settings.name || 'Chácara Solaris'}</div>
         <script>
           window.onload = () => { window.print(); }
         </script>

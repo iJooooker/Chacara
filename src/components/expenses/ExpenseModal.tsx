@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
-import { Expense, ExpenseCategory, ExpenseStatus, ExpensePriority } from '../../types';
-import { CATEGORY_LABELS } from '../../utils/formatters';
+import { Expense, ExpenseCategory, ExpenseStatus, ExpensePriority, ChacaraDetails } from '../../types';
+import { CATEGORY_LABELS, getLocalDateString } from '../../utils/formatters';
 import { processImageFile } from '../../utils/imageUtils';
 import { Hammer, User, DollarSign, Calendar, FileText, AlertCircle, Camera, X, Loader2 } from 'lucide-react';
 
@@ -11,6 +11,7 @@ interface ExpenseModalProps {
   onSave?: (data: any) => void;
   onSaveExpense?: (data: any) => void;
   initialData?: Expense | null;
+  settings?: ChacaraDetails;
 }
 
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({
@@ -19,6 +20,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   onSave,
   onSaveExpense,
   initialData,
+  settings,
 }) => {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('piscina');
@@ -48,7 +50,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setPhotos(initialData.photos || []);
       setNotes(initialData.notes || '');
     } else {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       setTitle('');
       setCategory('piscina');
       setCost('350');
@@ -109,7 +111,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       category: category || 'outros',
       cost: numericCost,
       responsible_person: responsiblePerson?.trim() || 'Não informado',
-      date: date || new Date().toISOString().split('T')[0],
+      date: date || getLocalDateString(),
       status: status || 'planned',
       priority: priority || 'medium',
       receipt_url_or_ref: receiptUrlOrRef?.trim() || '',
@@ -129,7 +131,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={initialData ? 'Editar Reforma / Despesa' : 'Registrar Nova Despesa ou Reforma'}
-      subtitle="Chácara Recanto da Paz • Gestão de custos e melhorias"
+      subtitle={`${settings?.name || 'Chácara Solaris'} • Gestão de custos e melhorias`}
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} noValidate className="space-y-4">

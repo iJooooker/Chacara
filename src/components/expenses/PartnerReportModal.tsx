@@ -81,7 +81,7 @@ ${completedExpenses
   .join('\n')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Relatório gerado pelo Sistema Gestão Recanto da Paz.`;
+Relatório gerado pelo Sistema de Gestão - ${settings.name}.`;
   };
 
   const handleCopy = () => {

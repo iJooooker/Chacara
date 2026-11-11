@@ -64,7 +64,6 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
-  const [selectedForDetails, setSelectedForDetails] = useState<Reservation | null>(null);
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
 
   // Dynamic extraction of calendar email and embed URL from settings.google_calendar_ical_url
@@ -283,6 +282,7 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
           reservations={reservations}
           onSelectReservation={(res) => onEditReservation(res)}
           onSelectDateForNewReservation={(dateStr) => onOpenNewModal(dateStr)}
+          settings={settings}
         />
       ) : viewMode === 'google-calendar' ? (
         <div className="bg-white rounded-xl border border-stone-200 shadow-xs p-4 sm:p-5 space-y-4">

@@ -78,11 +78,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   // Approximate occupancy rate for next 60 days
   const occupancyRate = Math.min(100, Math.round((totalBookedDays / 60) * 100));
 
-  // Upcoming check-ins (Next 7-14 days)
+  // Upcoming check-ins
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  const sevenDaysFromNow = new Date(now);
-  sevenDaysFromNow.setDate(now.getDate() + 14);
 
   const upcomingCheckins = activeReservations
     .filter((r) => {

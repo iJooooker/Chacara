@@ -21,6 +21,7 @@ import {
   getStoredEventId,
   removeStoredEventId,
 } from './services/googleCalendarService';
+import { getLocalDateString } from './utils/formatters';
 import { CheckCircle2, Trees, Database, RefreshCw, HardDrive } from 'lucide-react';
 
 export default function App() {
@@ -77,7 +78,7 @@ export default function App() {
 
   // Pending checkins count for badge
   const pendingCheckinsCount = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     return reservations.filter((r) => r.status === 'confirmed' && r.check_in >= today).length;
   }, [reservations]);
 
@@ -321,6 +322,7 @@ export default function App() {
         onSave={handleSaveExpense}
         onSaveExpense={handleSaveExpense}
         initialData={editingExpense}
+        settings={settings}
       />
 
       <WhatsAppModal

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { ChacaraDetails } from '../../types';
+import { getLocalDateString } from '../../utils/formatters';
 import {
   Settings,
   Download,
@@ -80,7 +81,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `backup-recanto-da-paz-${new Date().toISOString().split('T')[0]}.json`;
+    const sanitizedName = (settings?.name || 'chacara-solaris')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'chacara-solaris';
+    a.download = `backup-${sanitizedName}-${getLocalDateString()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -408,7 +415,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-start space-x-2">
                 <AlertTriangle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
                 <p className="text-xs font-semibold text-rose-900 leading-relaxed">
-                  Atenção: isso apagará suas reservas, despesas e checklists atuais no banco e voltará aos dados de exemplo. Confirmar?
+                  Atenção: isso apagará reservas, despesas e checklists atuais do banco e restaurará os dados de exemplo. Deseja continuar?
                 </p>
               </div>
               <div className="flex items-center justify-end space-x-2 pt-1">

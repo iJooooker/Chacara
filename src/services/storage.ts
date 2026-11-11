@@ -231,7 +231,7 @@ export const StorageService = {
   exportAllData(): string {
     const backup = {
       exported_at: new Date().toISOString(),
-      chacara: 'Recanto da Paz',
+      chacara: this.getSettings().name || 'Chácara Solaris',
       reservations: this.getReservations(),
       expenses: this.getExpenses(),
       checklists: this.getChecklists(),

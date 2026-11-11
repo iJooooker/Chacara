@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { ChacaraDetails } from '../../types';
+import { isSupabaseConfigured } from '../../services/supabaseClient';
 
 interface HeaderProps {
   activeTab: 'dashboard' | 'reservations' | 'expenses' | 'checklists';
@@ -53,10 +54,17 @@ export const Header: React.FC<HeaderProps> = ({
                 <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
                   {settings.name}
                 </h1>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-900/90 text-emerald-300 border border-emerald-800">
-                  <Database className="w-3 h-3 mr-1 text-emerald-400" />
-                  Supabase Live
-                </span>
+                {isSupabaseConfigured ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-900/90 text-emerald-300 border border-emerald-800">
+                    <Database className="w-3 h-3 mr-1 text-emerald-400" />
+                    Supabase Live
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-stone-800/90 text-stone-300 border border-stone-700">
+                    <Database className="w-3 h-3 mr-1 text-stone-400" />
+                    Modo Local
+                  </span>
+                )}
                 {isSyncing && (
                   <span className="inline-flex items-center text-[11px] text-emerald-400 animate-pulse">
                     <RefreshCw className="w-3 h-3 animate-spin mr-1" />

@@ -75,7 +75,7 @@ Qualquer dúvida ou caso já tenha efetuado o PIX, nos avise por aqui! Muito obr
       case 'checkout_guide':
         return `👋 *Informações de Check-out & Despedida - ${settings.name}*
 
-Olá, *${reservation.client_name}*! Esperamos que tenham aproveitado momentos inesquecíveis no Recanto da Paz!
+Olá, *${reservation.client_name}*! Esperamos que tenham aproveitado momentos inesquecíveis na ${settings.name}!
 
 Lembramos que o horário limite de saída hoje é até as *${settings.check_out_time}*.
 
