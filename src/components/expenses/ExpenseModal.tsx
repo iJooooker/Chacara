@@ -104,8 +104,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
     const numericCost = parseFloat(String(cost).replace(',', '.')) || 0;
 
-    const newExpense = {
-      id: initialData?.id || 'exp-' + Date.now(),
+    const expenseData: Omit<Expense, 'id' | 'created_at' | 'updated_at'> = {
       title: title.trim(),
       category: category || 'outros',
       cost: numericCost,
@@ -116,13 +115,11 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       receipt_url_or_ref: receiptUrlOrRef?.trim() || '',
       notes: notes?.trim() || '',
       photos: photos || [],
-      created_at: initialData?.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     };
 
     const saveFunction = onSaveExpense || onSave;
     if (saveFunction) {
-      saveFunction(newExpense);
+      saveFunction(expenseData);
     }
     onClose();
   };

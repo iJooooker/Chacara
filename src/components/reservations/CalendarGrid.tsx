@@ -173,7 +173,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           return (
             <div
               key={idx}
-              className={`min-h-[90px] sm:min-h-[110px] p-1.5 sm:p-2 flex flex-col justify-between transition-colors ${
+              className={`group min-h-[90px] sm:min-h-[110px] p-1.5 sm:p-2 flex flex-col justify-between transition-colors ${
                 !cell.isCurrentMonth
                   ? 'bg-stone-100/50 text-slate-400'
                   : isOccupied
@@ -199,7 +199,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   <button
                     type="button"
                     onClick={() => onSelectDateForNewReservation(cell.dateStr)}
-                    className="opacity-0 hover:opacity-100 focus:opacity-100 text-[10px] font-bold text-emerald-800 hover:text-emerald-900 transition-opacity px-1 rounded hover:bg-emerald-100 cursor-pointer"
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 text-[10px] font-bold text-emerald-800 hover:text-emerald-900 transition-opacity px-1 rounded hover:bg-emerald-100 cursor-pointer"
                     title="Reservar a partir deste dia"
                   >
                     + Locar

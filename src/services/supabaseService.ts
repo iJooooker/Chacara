@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Reservation, Expense, Checklist, ChacaraDetails } from '../types';
 import { StorageService } from './storage';
+import { getStoredEventId } from './googleCalendarService';
 import {
   INITIAL_RESERVATIONS,
   INITIAL_EXPENSES,
@@ -58,6 +59,17 @@ function sanitizeReservationForDb(
     result.daily_rate = reservation.daily_rate;
   }
 
+  if (reservation.google_calendar_event_id !== undefined) {
+    result.google_calendar_event_id =
+      reservation.google_calendar_event_id && reservation.google_calendar_event_id.trim()
+        ? reservation.google_calendar_event_id.trim()
+        : null;
+  }
+
+  if (reservation.last_synced_at !== undefined) {
+    result.last_synced_at = reservation.last_synced_at || null;
+  }
+
   if (reservation.created_at) result.created_at = reservation.created_at;
   result.updated_at = new Date().toISOString();
 
@@ -84,11 +96,35 @@ export const SupabaseService = {
         return StorageService.getReservations();
       }
 
-      // Supabase is the single authoritative source of truth.
-      // Whatever data exists remotely (including an empty list) is the true state.
+      // Supabase is authoritative, but merge local Google Calendar info
+      // if columns are null or empty in the remote table
       const remoteReservations = (data || []) as Reservation[];
-      StorageService.saveReservations(remoteReservations);
-      return remoteReservations;
+      const localReservations = StorageService.getReservations();
+      const localMap = new Map<string, Reservation>();
+      localReservations.forEach((item) => {
+        if (item.id) localMap.set(String(item.id), item);
+      });
+
+      const mergedReservations = remoteReservations.map((remote) => {
+        const local = localMap.get(String(remote.id));
+        const storedEventId = getStoredEventId(remote.id);
+        const existingEventId =
+          remote.google_calendar_event_id && remote.google_calendar_event_id.trim()
+            ? remote.google_calendar_event_id.trim()
+            : (local?.google_calendar_event_id || storedEventId || undefined);
+
+        const existingLastSynced =
+          remote.last_synced_at || local?.last_synced_at || undefined;
+
+        return {
+          ...remote,
+          google_calendar_event_id: existingEventId,
+          last_synced_at: existingLastSynced,
+        };
+      });
+
+      StorageService.saveReservations(mergedReservations);
+      return mergedReservations;
     } catch (err: any) {
       console.warn('Supabase getReservations unavailable, using local storage:', err?.message || err);
       return StorageService.getReservations();
@@ -115,14 +151,41 @@ export const SupabaseService = {
         dbPayload.id = localSaved.id;
       }
 
-      const { data, error } = await supabase
+      let insertPayload: Record<string, any> = { ...dbPayload };
+
+      let { data, error } = await supabase
         .from('reservations')
-        .insert([dbPayload])
+        .insert([insertPayload])
         .select()
         .single();
 
+      if (
+        error &&
+        (error.code === 'PGRST204' ||
+          error.message?.toLowerCase().includes('google_calendar_event_id') ||
+          error.message?.toLowerCase().includes('last_synced_at') ||
+          error.details?.toLowerCase().includes('google_calendar_event_id') ||
+          error.details?.toLowerCase().includes('last_synced_at'))
+      ) {
+        console.info('Supabase reservations table missing calendar columns, retrying without them...');
+        const { google_calendar_event_id: _g, last_synced_at: _l, ...payloadWithoutCalendar } = insertPayload;
+        const retryResult = await supabase
+          .from('reservations')
+          .insert([payloadWithoutCalendar])
+          .select()
+          .single();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
       if (!error && data) {
-        const savedRes = data as Reservation;
+        const savedRes: Reservation = {
+          ...(data as Reservation),
+          google_calendar_event_id:
+            (data as any).google_calendar_event_id || localSaved.google_calendar_event_id,
+          last_synced_at:
+            (data as any).last_synced_at || localSaved.last_synced_at,
+        };
         // Keep localStorage synchronized with the exact Supabase returned row
         const currentList = StorageService.getReservations();
         const updatedList = currentList.map((r) =>
@@ -169,6 +232,16 @@ export const SupabaseService = {
       if (updates.status !== undefined) dbPayload.status = updates.status;
       if (updates.daily_rate !== undefined) dbPayload.daily_rate = updates.daily_rate;
 
+      if (updates.google_calendar_event_id !== undefined) {
+        dbPayload.google_calendar_event_id =
+          updates.google_calendar_event_id && updates.google_calendar_event_id.trim()
+            ? updates.google_calendar_event_id.trim()
+            : null;
+      }
+      if (updates.last_synced_at !== undefined) {
+        dbPayload.last_synced_at = updates.last_synced_at || null;
+      }
+
       if (updates.client_document !== undefined) {
         dbPayload.client_document =
           updates.client_document && updates.client_document.trim()
@@ -188,15 +261,62 @@ export const SupabaseService = {
             : null;
       }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('reservations')
         .update(dbPayload)
         .eq('id', id)
         .select()
         .single();
 
+      if (
+        error &&
+        (updates.google_calendar_event_id !== undefined || updates.last_synced_at !== undefined) &&
+        (error.code === 'PGRST204' ||
+          error.message?.toLowerCase().includes('google_calendar_event_id') ||
+          error.message?.toLowerCase().includes('last_synced_at') ||
+          error.details?.toLowerCase().includes('google_calendar_event_id') ||
+          error.details?.toLowerCase().includes('last_synced_at'))
+      ) {
+        console.info('Supabase reservations table missing calendar columns on update, retrying without them...');
+        const { google_calendar_event_id: _g, last_synced_at: _l, ...payloadWithoutCalendar } = dbPayload;
+        const remainingKeys = Object.keys(payloadWithoutCalendar).filter((k) => k !== 'updated_at');
+
+        if (remainingKeys.length === 0) {
+          return localUpdated;
+        }
+
+        const retryResult = await supabase
+          .from('reservations')
+          .update(payloadWithoutCalendar)
+          .eq('id', id)
+          .select()
+          .single();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
       if (!error && data) {
-        return data as Reservation;
+        const finalEventId =
+          updates.google_calendar_event_id !== undefined
+            ? updates.google_calendar_event_id
+            : ((data as any).google_calendar_event_id || localUpdated?.google_calendar_event_id);
+        const finalLastSynced =
+          updates.last_synced_at !== undefined
+            ? updates.last_synced_at
+            : ((data as any).last_synced_at || localUpdated?.last_synced_at);
+
+        const savedRes: Reservation = {
+          ...(data as Reservation),
+          google_calendar_event_id: finalEventId,
+          last_synced_at: finalLastSynced,
+        };
+
+        StorageService.updateReservation(id, {
+          google_calendar_event_id: finalEventId,
+          last_synced_at: finalLastSynced,
+        });
+
+        return savedRes;
       }
       if (error) {
         console.warn('Supabase updateReservation notice:', error.message);
@@ -251,8 +371,30 @@ export const SupabaseService = {
       }
 
       const remoteExpenses = (data || []) as Expense[];
-      StorageService.saveExpenses(remoteExpenses);
-      return remoteExpenses;
+      const localExpenses = StorageService.getExpenses();
+      const localMap = new Map<string, Expense>();
+      localExpenses.forEach((item) => {
+        if (item.id) localMap.set(String(item.id), item);
+      });
+
+      const mergedExpenses = remoteExpenses.map((remote) => {
+        const local = localMap.get(String(remote.id));
+        if (
+          (!remote.photos || remote.photos.length === 0) &&
+          local &&
+          local.photos &&
+          local.photos.length > 0
+        ) {
+          return {
+            ...remote,
+            photos: local.photos,
+          };
+        }
+        return remote;
+      });
+
+      StorageService.saveExpenses(mergedExpenses);
+      return mergedExpenses;
     } catch (err: any) {
       console.warn('Supabase getExpenses unavailable, using local storage:', err?.message || err);
       return StorageService.getExpenses();
@@ -269,16 +411,50 @@ export const SupabaseService = {
     }
 
     try {
-      // Strip client-side photos array if present before sending to Supabase
-      const { photos, ...dbPayload } = localSaved;
-      const { data, error } = await supabase
+      let insertPayload: Record<string, any> = { ...localSaved };
+      // Avoid passing custom client temporary IDs if Supabase generates standard IDs
+      if (localSaved.id && localSaved.id.startsWith('exp-')) {
+        delete insertPayload.id;
+      }
+
+      let { data, error } = await supabase
         .from('expenses')
-        .insert([dbPayload])
+        .insert([insertPayload])
         .select()
         .single();
 
+      if (
+        error &&
+        (error.code === 'PGRST204' ||
+          error.message?.toLowerCase().includes('photos') ||
+          error.details?.toLowerCase().includes('photos'))
+      ) {
+        console.info('Supabase expenses table missing photos column, retrying without photos...');
+        const { photos: _photos, ...payloadWithoutPhotos } = insertPayload;
+        const retryResult = await supabase
+          .from('expenses')
+          .insert([payloadWithoutPhotos])
+          .select()
+          .single();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
       if (!error && data) {
-        return { ...(data as Expense), photos };
+        const savedExp: Expense = {
+          ...(data as Expense),
+          photos:
+            (data as any).photos && (data as any).photos.length > 0
+              ? (data as any).photos
+              : localSaved.photos,
+        };
+
+        const currentList = StorageService.getExpenses();
+        const updatedList = currentList.map((e) =>
+          e.id === localSaved.id ? savedExp : e
+        );
+        StorageService.saveExpenses(updatedList);
+        return savedExp;
       }
 
       if (error) {
@@ -302,21 +478,52 @@ export const SupabaseService = {
     }
 
     try {
-      const { photos, ...dbUpdates } = updates;
-      const payload = {
-        ...dbUpdates,
+      const payload: Record<string, any> = {
+        ...updates,
         updated_at: new Date().toISOString(),
       };
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('expenses')
         .update(payload)
         .eq('id', id)
         .select()
         .single();
 
+      if (
+        error &&
+        updates.photos !== undefined &&
+        (error.code === 'PGRST204' ||
+          error.message?.toLowerCase().includes('photos') ||
+          error.details?.toLowerCase().includes('photos'))
+      ) {
+        console.info('Supabase expenses table missing photos column on update, retrying without photos...');
+        const { photos: _photos, ...payloadWithoutPhotos } = payload;
+        const retryResult = await supabase
+          .from('expenses')
+          .update(payloadWithoutPhotos)
+          .eq('id', id)
+          .select()
+          .single();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
       if (!error && data) {
-        return { ...(data as Expense), photos: updates.photos ?? localUpdated?.photos };
+        const finalPhotos =
+          updates.photos !== undefined
+            ? updates.photos
+            : ((data as any).photos && (data as any).photos.length > 0
+                ? (data as any).photos
+                : localUpdated?.photos || []);
+
+        const savedExp: Expense = {
+          ...(data as Expense),
+          photos: finalPhotos,
+        };
+
+        StorageService.updateExpense(id, { photos: finalPhotos });
+        return savedExp;
       }
 
       if (error) {

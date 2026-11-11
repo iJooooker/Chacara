@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../common/Modal';
 import { Reservation, PaymentStatus, ReservationStatus, ChacaraDetails } from '../../types';
 import { calculateDaysBetween, formatCurrency } from '../../utils/formatters';
@@ -13,8 +13,9 @@ import {
   Sparkles,
   CheckCircle2,
   Loader2,
+  ShieldCheck,
 } from 'lucide-react';
-import { getAccessToken, googleSignIn } from '../../services/googleAuth';
+import { getAccessToken, googleSignIn, getCurrentUser } from '../../services/googleAuth';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -23,6 +24,8 @@ interface ReservationModalProps {
     data: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>
   ) => void | Promise<void>;
   initialData?: Reservation | null;
+  initialCheckIn?: string | null;
+  reservations?: Reservation[];
   settings?: ChacaraDetails;
 }
 
@@ -31,6 +34,8 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
   onClose,
   onSave,
   initialData,
+  initialCheckIn,
+  reservations = [],
   settings,
 }) => {
   const [clientName, setClientName] = useState('');
@@ -49,11 +54,13 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+  const [googleUser, setGoogleUser] = useState<any>(null);
 
   useEffect(() => {
     if (isOpen) {
       getAccessToken().then((token) => {
         setIsGoogleConnected(Boolean(token));
+        setGoogleUser(getCurrentUser());
       });
     }
   }, [isOpen]);
@@ -86,6 +93,30 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       setStatus(initialData.status || 'confirmed');
       setContractNotes(initialData.contract_notes || '');
       setDepositDate(initialData.deposit_date || '');
+    } else if (initialCheckIn) {
+      // Pre-fill clicked calendar date and next day
+      const [year, month, day] = initialCheckIn.split('-').map(Number);
+      const nextDay = new Date(year, month - 1, day + 1);
+      const nextY = nextDay.getFullYear();
+      const nextM = String(nextDay.getMonth() + 1).padStart(2, '0');
+      const nextD = String(nextDay.getDate()).padStart(2, '0');
+      const nextDayStr = `${nextY}-${nextM}-${nextD}`;
+
+      const today = new Date();
+      const toIso = (d: Date) => d.toISOString().split('T')[0];
+
+      setClientName('');
+      setClientPhone('');
+      setClientDocument('');
+      setCheckIn(initialCheckIn);
+      setCheckOut(nextDayStr);
+      setGuestsCount(12);
+      setTotalAmount(2200);
+      setAmountPaid(1100);
+      setPaymentStatus('partially_paid');
+      setStatus('confirmed');
+      setContractNotes('');
+      setDepositDate(toIso(today));
     } else {
       // Default to next upcoming weekend
       const today = new Date();
@@ -110,7 +141,22 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
       setDepositDate(toIso(today));
     }
     setErrorMessage('');
-  }, [initialData, isOpen]);
+  }, [initialData, initialCheckIn, isOpen]);
+
+  // Overbooking conflict detection
+  const conflictingReservations = useMemo(() => {
+    if (!checkIn || !checkOut || status === 'cancelled') return [];
+    if (!reservations || reservations.length === 0) return [];
+
+    return reservations.filter((r) => {
+      if (r.status === 'cancelled') return false;
+      if (initialData?.id && r.id === initialData.id) return false;
+      // Overlap occurs when checkIn <= r.check_out AND checkOut >= r.check_in
+      return checkIn <= r.check_out && checkOut >= r.check_in;
+    });
+  }, [checkIn, checkOut, status, reservations, initialData?.id]);
+
+  const hasConflict = conflictingReservations.length > 0;
 
   // Auto calculate remaining and payment status if amounts change
   const remaining = Math.max(0, (totalAmount || 0) - (amountPaid || 0));
@@ -153,6 +199,21 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
     }
     if (checkOut < checkIn) {
       setErrorMessage('A data de check-out não pode ser anterior à data de check-in.');
+      return;
+    }
+
+    // Overbooking validation
+    if (status !== 'cancelled' && hasConflict) {
+      const details = conflictingReservations
+        .map((c) => {
+          const cIn = c.check_in.split('-').reverse().join('/');
+          const cOut = c.check_out.split('-').reverse().join('/');
+          return `${c.client_name} (${cIn} a ${cOut})`;
+        })
+        .join(', ');
+      setErrorMessage(
+        `Não é possível salvar: conflito de datas com a locação de ${details}. Escolha outro período ou cancele a reserva conflitante.`
+      );
       return;
     }
 
@@ -297,7 +358,11 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
                 required
                 value={checkIn}
                 onChange={(e) => setCheckIn(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-sans"
+                className={`w-full px-3 py-2 text-sm bg-white border rounded-lg focus:outline-hidden focus:ring-2 font-sans ${
+                  hasConflict
+                    ? 'border-amber-400 focus:ring-amber-500'
+                    : 'border-slate-200 focus:ring-emerald-500'
+                }`}
               />
             </div>
             <div>
@@ -310,10 +375,47 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
                 required
                 value={checkOut}
                 onChange={(e) => setCheckOut(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-sans"
+                className={`w-full px-3 py-2 text-sm bg-white border rounded-lg focus:outline-hidden focus:ring-2 font-sans ${
+                  hasConflict
+                    ? 'border-amber-400 focus:ring-amber-500'
+                    : 'border-slate-200 focus:ring-emerald-500'
+                }`}
               />
             </div>
           </div>
+
+          {/* Alerta de Conflito de Datas (Overbooking) */}
+          {hasConflict && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 text-xs space-y-1.5 animate-fade-in shadow-2xs">
+              <div className="flex items-center font-bold text-amber-900">
+                <AlertCircle className="w-4 h-4 mr-1.5 text-amber-600 shrink-0" />
+                <span>Atenção: Conflito de datas detectado (Overbooking)!</span>
+              </div>
+              <p className="text-[11px] text-amber-900">
+                O período selecionado coincide com {conflictingReservations.length === 1 ? 'outra locação já cadastrada' : 'outras locações já cadastradas'}:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-950 font-medium pl-1">
+                {conflictingReservations.map((c) => {
+                  const cIn = c.check_in.split('-').reverse().join('/');
+                  const cOut = c.check_out.split('-').reverse().join('/');
+                  const statusLabel =
+                    c.status === 'confirmed'
+                      ? 'Confirmada'
+                      : c.status === 'in_progress'
+                      ? 'Em andamento'
+                      : c.status;
+
+                  return (
+                    <li key={c.id}>
+                      <span className="font-bold">{c.client_name}</span>: de{' '}
+                      <span className="font-bold underline decoration-amber-400">{cIn}</span> até{' '}
+                      <span className="font-bold underline decoration-amber-400">{cOut}</span> ({statusLabel})
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Valores e Pagamentos */}
@@ -434,8 +536,8 @@ export const ReservationModal: React.FC<ReservationModalProps> = ({
           </div>
           {isGoogleConnected ? (
             <span className="inline-flex items-center text-[11px] font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md shrink-0 w-fit">
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-              API Conectada
+              <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+              Conectado {googleUser?.email ? `(${googleUser.email})` : ''}
             </span>
           ) : (
             <button

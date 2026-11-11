@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Reservation, Expense, Checklist, ChacaraDetails } from '../types';
 import { SupabaseService } from '../services/supabaseService';
 import { supabase } from '../services/supabaseClient';
+import { StorageService } from '../services/storage';
 import {
   INITIAL_CHACARA_DETAILS,
 } from '../services/mockData';
@@ -85,15 +86,39 @@ export function useChacaraData() {
           if (payload.eventType === 'INSERT') {
             const newRes = payload.new as Reservation;
             setReservations((prev) => {
-              if (prev.some((r) => r.id === newRes.id)) {
-                return prev.map((r) => (r.id === newRes.id ? newRes : r));
+              const existingItem = prev.find((r) => r.id === newRes.id);
+              const fallbackItem =
+                existingItem || StorageService.getReservations().find((r) => r.id === newRes.id);
+              const mergedRes: Reservation = {
+                ...newRes,
+                google_calendar_event_id:
+                  newRes.google_calendar_event_id || fallbackItem?.google_calendar_event_id,
+                last_synced_at:
+                  newRes.last_synced_at || fallbackItem?.last_synced_at,
+              };
+
+              if (existingItem) {
+                return prev.map((r) => (r.id === newRes.id ? mergedRes : r));
               }
-              return [newRes, ...prev];
+              return [mergedRes, ...prev];
             });
           } else if (payload.eventType === 'UPDATE') {
             const updatedRes = payload.new as Reservation;
             setReservations((prev) =>
-              prev.map((r) => (r.id === updatedRes.id ? updatedRes : r))
+              prev.map((r) => {
+                if (r.id === updatedRes.id) {
+                  const fallbackItem =
+                    r || StorageService.getReservations().find((item) => item.id === updatedRes.id);
+                  return {
+                    ...updatedRes,
+                    google_calendar_event_id:
+                      updatedRes.google_calendar_event_id || fallbackItem?.google_calendar_event_id,
+                    last_synced_at:
+                      updatedRes.last_synced_at || fallbackItem?.last_synced_at,
+                  };
+                }
+                return r;
+              })
             );
           } else if (payload.eventType === 'DELETE') {
             const deletedId = (payload.old as { id?: string })?.id;
@@ -110,15 +135,35 @@ export function useChacaraData() {
           if (payload.eventType === 'INSERT') {
             const newExp = payload.new as Expense;
             setExpenses((prev) => {
-              if (prev.some((e) => e.id === newExp.id)) {
-                return prev.map((e) => (e.id === newExp.id ? newExp : e));
+              const existingItem = prev.find((e) => e.id === newExp.id);
+              const fallbackPhotos =
+                existingItem?.photos ||
+                StorageService.getExpenses().find((e) => e.id === newExp.id)?.photos ||
+                [];
+              const photos =
+                newExp.photos && newExp.photos.length > 0 ? newExp.photos : fallbackPhotos;
+              const mergedExp: Expense = { ...newExp, photos };
+
+              if (existingItem) {
+                return prev.map((e) => (e.id === newExp.id ? mergedExp : e));
               }
-              return [newExp, ...prev];
+              return [mergedExp, ...prev];
             });
           } else if (payload.eventType === 'UPDATE') {
             const updatedExp = payload.new as Expense;
             setExpenses((prev) =>
-              prev.map((e) => (e.id === updatedExp.id ? updatedExp : e))
+              prev.map((e) => {
+                if (e.id === updatedExp.id) {
+                  const photos =
+                    updatedExp.photos && updatedExp.photos.length > 0
+                      ? updatedExp.photos
+                      : e.photos ||
+                        StorageService.getExpenses().find((item) => item.id === updatedExp.id)?.photos ||
+                        [];
+                  return { ...updatedExp, photos };
+                }
+                return e;
+              })
             );
           } else if (payload.eventType === 'DELETE') {
             const deletedId = (payload.old as { id?: string })?.id;

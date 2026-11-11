@@ -50,6 +50,7 @@ export default function App() {
   // Modals state
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
+  const [prefilledCheckIn, setPrefilledCheckIn] = useState<string | null>(null);
 
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -88,10 +89,12 @@ export default function App() {
   // Handlers for Reservations
   const handleOpenNewReservation = (prefilledDate?: string) => {
     setEditingReservation(null);
+    setPrefilledCheckIn(prefilledDate || null);
     setIsReservationModalOpen(true);
   };
 
   const handleEditReservation = (res: Reservation) => {
+    setPrefilledCheckIn(null);
     setEditingReservation(res);
     setIsReservationModalOpen(true);
   };
@@ -277,9 +280,14 @@ export default function App() {
       {/* Application Modals */}
       <ReservationModal
         isOpen={isReservationModalOpen}
-        onClose={() => setIsReservationModalOpen(false)}
+        onClose={() => {
+          setIsReservationModalOpen(false);
+          setPrefilledCheckIn(null);
+        }}
         onSave={handleSaveReservation}
         initialData={editingReservation}
+        initialCheckIn={prefilledCheckIn}
+        reservations={reservations}
         settings={settings}
       />
 

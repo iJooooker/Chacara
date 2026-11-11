@@ -99,12 +99,19 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
         setIsOriginMismatch(false);
       },
       () => {
-        setUser(null);
-        setAccessToken(null);
+        getAccessToken().then((tok) => {
+          if (!tok) {
+            setUser(null);
+            setAccessToken(null);
+          } else {
+            setAccessToken(tok);
+            setUser(getCurrentUser());
+          }
+        });
       }
     );
 
-    // Initial check
+    // Initial check from persisted credentials
     getAccessToken().then((tok) => {
       if (tok) {
         setAccessToken(tok);
