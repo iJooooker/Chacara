@@ -76,10 +76,7 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
   const [savedClientIdSuccess, setSavedClientIdSuccess] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [showHowToGuide, setShowHowToGuide] = useState(false);
-  const [iCalUrl, setICalUrl] = useState(
-    settings.google_calendar_ical_url ||
-      'https://calendar.google.com/calendar/ical/claudemirjappa%40gmail.com/private-2ed0c9f86539a0e24ed962b6adc9af35/basic.ics'
-  );
+  const [iCalUrl, setICalUrl] = useState(settings.google_calendar_ical_url || '');
   const [savedICalSuccess, setSavedICalSuccess] = useState(false);
   const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ deletedCount: number; keptCount: number } | null>(null);

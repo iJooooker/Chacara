@@ -42,12 +42,18 @@ function loadSavedSession(): { token: string | null; user: User | null } {
   if (typeof window === 'undefined') return { token: null, user: null };
   try {
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const expiresAt = localStorage.getItem(STORAGE_KEYS.EXPIRES_AT);
     const userJson = localStorage.getItem(STORAGE_KEYS.USER);
+    const parsedUser = userJson ? JSON.parse(userJson) : null;
 
-    if (token) {
-      const parsedUser = userJson ? JSON.parse(userJson) : null;
-      return { token, user: parsedUser as unknown as User };
+    // Check expiration: if missing or expired, remove token and expiresAt, keep user info
+    if (!token || !expiresAt || Date.now() >= Number(expiresAt)) {
+      localStorage.removeItem(STORAGE_KEYS.TOKEN);
+      localStorage.removeItem(STORAGE_KEYS.EXPIRES_AT);
+      return { token: null, user: parsedUser as unknown as User };
     }
+
+    return { token, user: parsedUser as unknown as User };
   } catch (e) {
     console.warn('Erro ao carregar sessão Google salva:', e);
   }
@@ -61,13 +67,15 @@ export function persistSession(token: string, user: User | null, expiresInSecond
     const expiresAt = Date.now() + Math.max(expiresInSeconds - 120, 600) * 1000;
     localStorage.setItem(STORAGE_KEYS.EXPIRES_AT, String(expiresAt));
 
-    const userInfo: StoredGoogleUser = {
-      displayName: user?.displayName || 'Junior Gestão de Tráfego',
-      email: user?.email || 'claudemirjappa@gmail.com',
-      photoURL: user?.photoURL || null,
-      uid: user?.uid || 'google-user-session',
-    };
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userInfo));
+    if (user) {
+      const userInfo: StoredGoogleUser = {
+        displayName: user.displayName || null,
+        email: user.email || null,
+        photoURL: user.photoURL || null,
+        uid: user.uid || 'google-user-session',
+      };
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userInfo));
+    }
   } catch (e) {
     console.warn('Erro ao salvar sessão Google:', e);
   }
@@ -84,7 +92,7 @@ export function clearPersistedSession() {
   }
 }
 
-// Flag to indicate if we are in the middle of a sign-in flow
+// Flag to indicate if we are in the middle of an explicit sign-in flow
 let isSigningIn = false;
 
 // Initialize cached token and user from localStorage immediately
@@ -98,7 +106,7 @@ export const initAuth = (
   onAuthFailure?: () => void,
   onUserDetectedWithoutToken?: (user: User) => void
 ) => {
-  // If we already have a saved session, activate it immediately so the user doesn't have to wait or log in again
+  // If we already have a valid saved token and user, activate it immediately
   if (cachedAccessToken && currentUser) {
     if (onAuthSuccess) {
       onAuthSuccess(currentUser, cachedAccessToken);
@@ -120,20 +128,15 @@ export const initAuth = (
       if (cachedAccessToken) {
         persistSession(cachedAccessToken, currentUser);
         if (onAuthSuccess) onAuthSuccess(currentUser, cachedAccessToken);
-      } else if (!isSigningIn) {
+      } else {
         if (onUserDetectedWithoutToken) {
           onUserDetectedWithoutToken(user);
         }
-        // Try silent refresh without treating failure as a fatal error
-        trySilentTokenRefresh().then((tok) => {
-          if (tok) {
-            cachedAccessToken = tok;
-            persistSession(tok, currentUser);
-            if (onAuthSuccess) onAuthSuccess(currentUser!, tok);
-          } else {
-            console.info('Usuário logado no Firebase; autorização da Google Agenda requer clique para renovação.');
-          }
-        });
+        // NEVER open popup automatically on page load or F5.
+        // Google Identity Services initTokenClient always opens a popup window,
+        // which causes intrusive origin_mismatch errors if called silently.
+        // Token renewal must wait for an explicit user click.
+        console.info('Usuário identificado; autorização da Google Agenda aguardando clique explícito do usuário.');
       }
     } else {
       // If Firebase SDK does not report a user, check if we have a persisted session
@@ -177,9 +180,18 @@ const loadGisScript = (): Promise<void> => {
     if ((window as any).google?.accounts?.oauth2) {
       return resolve();
     }
-    const existing = document.getElementById('google-gis-script');
+    const existing = document.getElementById('google-gis-script') as HTMLScriptElement | null;
     if (existing) {
-      existing.addEventListener('load', () => resolve());
+      if (existing.getAttribute('data-loaded') === 'true') {
+        return resolve();
+      }
+      existing.addEventListener('load', () => {
+        existing.setAttribute('data-loaded', 'true');
+        resolve();
+      });
+      existing.addEventListener('error', () => {
+        reject(new Error('Falha ao carregar o script do Google Identity Services'));
+      });
       return;
     }
     const script = document.createElement('script');
@@ -187,14 +199,20 @@ const loadGisScript = (): Promise<void> => {
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Falha ao carregar o script do Google Identity Services'));
+    script.onload = () => {
+      script.setAttribute('data-loaded', 'true');
+      resolve();
+    };
+    script.onerror = () => {
+      reject(new Error('Falha ao carregar o script do Google Identity Services'));
+    };
     document.head.appendChild(script);
   });
 };
 
 /**
  * Requests an access token directly via Google Identity Services
+ * This MUST only be triggered from an explicit user gesture (e.g. button click).
  */
 export const requestGisAccessToken = async (
   promptMode: '' | 'select_account' = 'select_account'
@@ -206,14 +224,12 @@ export const requestGisAccessToken = async (
   }
 
   const clientId = getOAuthClientId();
-  const emailHint = currentUser?.email || 'claudemirjappa@gmail.com';
 
   return new Promise((resolve, reject) => {
     try {
-      const client = google.accounts.oauth2.initTokenClient({
+      const clientConfig: Record<string, any> = {
         client_id: clientId,
         scope: SCOPES.join(' '),
-        hint: emailHint,
         callback: (tokenResponse: any) => {
           if (tokenResponse.error) {
             const err = new Error(tokenResponse.error_description || tokenResponse.error);
@@ -236,8 +252,13 @@ export const requestGisAccessToken = async (
           (errorObj as any).isOriginMismatch = true;
           reject(errorObj);
         },
-      });
+      };
 
+      if (currentUser?.email && currentUser.email.trim().length > 0) {
+        clientConfig.hint = currentUser.email.trim();
+      }
+
+      const client = google.accounts.oauth2.initTokenClient(clientConfig);
       client.requestAccessToken({ prompt: promptMode });
     } catch (err: any) {
       reject(err);
@@ -246,15 +267,10 @@ export const requestGisAccessToken = async (
 };
 
 /**
- * Attempts silent token refresh via GIS without popping up a window
+ * Kept for interface compatibility, but disabled to guarantee no unexpected popups occur.
  */
 export const trySilentTokenRefresh = async (): Promise<string | null> => {
-  try {
-    return await requestGisAccessToken('');
-  } catch (e) {
-    console.info('Tentativa de renovação silenciosa de token necessita interação do usuário:', e);
-    return null;
-  }
+  return null;
 };
 
 export interface AuthErrorInfo {
@@ -265,7 +281,7 @@ export interface AuthErrorInfo {
   originalMessage: string;
 }
 
-// Must be called from a button click or user interaction
+// Must be called from an explicit button click or user interaction
 export const googleSignIn = async (): Promise<{ user: User | null; accessToken: string } | null> => {
   try {
     isSigningIn = true;
@@ -278,7 +294,6 @@ export const googleSignIn = async (): Promise<{ user: User | null; accessToken: 
 
     cachedAccessToken = credential.accessToken;
     currentUser = result.user;
-    // Persist session credentials so user never has to re-authenticate manually
     persistSession(cachedAccessToken, currentUser);
 
     return { user: result.user, accessToken: cachedAccessToken };
@@ -347,7 +362,23 @@ export const googleSignIn = async (): Promise<{ user: User | null; accessToken: 
   }
 };
 
+/**
+ * Returns the currently valid access token or null if expired/absent.
+ * This is completely passive: it NEVER opens a popup or triggers unprompted authorization.
+ */
 export const getAccessToken = async (): Promise<string | null> => {
+  if (typeof window === 'undefined') return null;
+
+  const expiresAt = localStorage.getItem(STORAGE_KEYS.EXPIRES_AT);
+  if (!expiresAt || Date.now() >= Number(expiresAt)) {
+    cachedAccessToken = null;
+    try {
+      localStorage.removeItem(STORAGE_KEYS.TOKEN);
+      localStorage.removeItem(STORAGE_KEYS.EXPIRES_AT);
+    } catch {}
+    return null;
+  }
+
   if (!cachedAccessToken) {
     const saved = loadSavedSession();
     if (saved.token) {
@@ -355,17 +386,8 @@ export const getAccessToken = async (): Promise<string | null> => {
       if (saved.user && !currentUser) {
         currentUser = saved.user;
       }
-    }
-  }
-
-  // Check expiration and try silent renewal if expired
-  if (typeof window !== 'undefined' && cachedAccessToken) {
-    const expiresAt = Number(localStorage.getItem(STORAGE_KEYS.EXPIRES_AT)) || 0;
-    if (expiresAt > 0 && Date.now() > expiresAt) {
-      const refreshed = await trySilentTokenRefresh();
-      if (refreshed) {
-        return refreshed;
-      }
+    } else {
+      return null;
     }
   }
 
@@ -392,4 +414,3 @@ export const logoutGoogle = async () => {
     console.warn('Erro ao deslogar do Firebase:', e);
   }
 };
-
