@@ -164,6 +164,21 @@ export function saveStoredEventId(reservationId: string, eventId: string): void 
   }
 }
 
+export function removeStoredEventId(reservationId: string): void {
+  if (typeof window === 'undefined' || !reservationId) return;
+  try {
+    const raw = localStorage.getItem(EVENT_STORAGE_KEY);
+    if (!raw) return;
+    const map = JSON.parse(raw);
+    if (reservationId in map) {
+      delete map[reservationId];
+      localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(map));
+    }
+  } catch (e) {
+    console.warn('Erro ao remover ID do evento no storage:', e);
+  }
+}
+
 /**
  * Creates or updates an event in Google Calendar using the REST API.
  * Guaranteed to prevent duplicate events: checks existing event ID and searches calendar before POSTing.

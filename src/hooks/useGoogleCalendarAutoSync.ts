@@ -81,7 +81,12 @@ export function useGoogleCalendarAutoSync({
    * Executes the push to Google Calendar if hash or versioning validates.
    */
   const executePush = useCallback(
-    async (res: Reservation, expectedVersion: number, isNew: boolean = false) => {
+    async (
+      res: Reservation,
+      expectedVersion: number,
+      isNew: boolean = false,
+      notifyIfNoToken: boolean = false
+    ) => {
       if (!res?.id || !res?.client_name) return;
 
       // 1. Check if another update arrived after this debounced call was scheduled
@@ -113,7 +118,14 @@ export function useGoogleCalendarAutoSync({
 
       try {
         const token = await getAccessToken();
-        if (!token) return;
+        if (!token) {
+          if (notifyIfNoToken && onNotify) {
+            onNotify(
+              '⚠️ Reserva salva no banco! Para enviar também à Google Agenda, conecte sua conta Google nesta sessão.'
+            );
+          }
+          return;
+        }
 
         isSyncingRef.current.add(res.id);
         lastSyncTimestampRef.current.set(res.id, Date.now());
@@ -155,7 +167,7 @@ export function useGoogleCalendarAutoSync({
    * Schedules a debounced push for a single reservation.
    */
   const scheduleDebouncedPush = useCallback(
-    (res: Reservation, isNew: boolean = false) => {
+    (res: Reservation, isNew: boolean = false, notifyIfNoToken: boolean = false) => {
       if (!res?.id) return;
 
       // Increment version for this reservation
@@ -171,7 +183,7 @@ export function useGoogleCalendarAutoSync({
       // Set new debounce timer
       const timer = setTimeout(() => {
         debounceTimersRef.current.delete(res.id);
-        executePush(res, nextVersion, isNew);
+        executePush(res, nextVersion, isNew, notifyIfNoToken);
       }, debounceMs);
 
       debounceTimersRef.current.set(res.id, timer);
@@ -184,7 +196,7 @@ export function useGoogleCalendarAutoSync({
    */
   const syncReservationToGoogle = useCallback(
     (res: Reservation, isNew: boolean = false) => {
-      scheduleDebouncedPush(res, isNew);
+      scheduleDebouncedPush(res, isNew, true);
     },
     [scheduleDebouncedPush]
   );
@@ -218,14 +230,14 @@ export function useGoogleCalendarAutoSync({
 
       if (!prevHash) {
         // Brand new reservation created
-        scheduleDebouncedPush(res, true);
+        scheduleDebouncedPush(res, true, false);
       } else if (prevHash !== currentHash) {
         // Existing reservation with modified business details
-        scheduleDebouncedPush(res, false);
+        scheduleDebouncedPush(res, false, false);
       }
     });
 
-    // Cleanup timers for deleted reservations
+    // Cleanup timers and caches for deleted reservations
     const currentIds = new Set(reservations.map((r) => r.id));
     for (const [id, timer] of debounceTimersRef.current.entries()) {
       if (!currentIds.has(id)) {
@@ -233,8 +245,16 @@ export function useGoogleCalendarAutoSync({
         debounceTimersRef.current.delete(id);
         lastSyncedHashMap.current.delete(id);
         versionMap.current.delete(id);
+        lastSyncTimestampRef.current.delete(id);
       }
     }
+    lastSyncedHashMap.current.forEach((_, id) => {
+      if (!currentIds.has(id)) {
+        lastSyncedHashMap.current.delete(id);
+        versionMap.current.delete(id);
+        lastSyncTimestampRef.current.delete(id);
+      }
+    });
   }, [reservations, settings, enabled, scheduleDebouncedPush]);
 
   // Cleanup all timers on unmount

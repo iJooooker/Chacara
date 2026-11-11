@@ -517,31 +517,89 @@ export function useChacaraData() {
   }, [reservations, expenses, checklists, settings]);
 
   const importData = useCallback(
-    async (jsonStr: string) => {
+    async (jsonStr: string): Promise<boolean> => {
       try {
+        if (!jsonStr || typeof jsonStr !== 'string') return false;
         const parsed = JSON.parse(jsonStr);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          return false;
+        }
+
+        const hasValidKey =
+          ('reservations' in parsed && Array.isArray(parsed.reservations)) ||
+          ('expenses' in parsed && Array.isArray(parsed.expenses)) ||
+          ('checklists' in parsed && Array.isArray(parsed.checklists)) ||
+          ('settings' in parsed && typeof parsed.settings === 'object' && parsed.settings !== null);
+
+        if (!hasValidKey) {
+          return false;
+        }
+
+        // Avoid duplicates by checking existing IDs in state and local storage
+        const currentReservations = StorageService.getReservations();
+        const existingResIds = new Set(
+          [...reservations, ...currentReservations]
+            .map((r) => r?.id && String(r.id))
+            .filter(Boolean) as string[]
+        );
+
         if (parsed.reservations && Array.isArray(parsed.reservations)) {
-          setReservations(parsed.reservations);
           for (const res of parsed.reservations) {
-            await SupabaseService.addReservation(res);
+            if (!res) continue;
+            const resId = res.id ? String(res.id) : null;
+            if (resId && existingResIds.has(resId)) {
+              await SupabaseService.updateReservation(resId, res);
+            } else {
+              await SupabaseService.addReservation(res as any);
+              if (resId) existingResIds.add(resId);
+            }
           }
         }
+
+        const currentExpenses = StorageService.getExpenses();
+        const existingExpIds = new Set(
+          [...expenses, ...currentExpenses]
+            .map((e) => e?.id && String(e.id))
+            .filter(Boolean) as string[]
+        );
+
         if (parsed.expenses && Array.isArray(parsed.expenses)) {
-          setExpenses(parsed.expenses);
           for (const exp of parsed.expenses) {
-            await SupabaseService.addExpense(exp);
+            if (!exp) continue;
+            const expId = exp.id ? String(exp.id) : null;
+            if (expId && existingExpIds.has(expId)) {
+              await SupabaseService.updateExpense(expId, exp);
+            } else {
+              await SupabaseService.addExpense(exp as any);
+              if (expId) existingExpIds.add(expId);
+            }
           }
         }
+
+        const currentChecklists = StorageService.getChecklists();
+        const existingChkIds = new Set(
+          [...checklists, ...currentChecklists]
+            .map((c) => c?.id && String(c.id))
+            .filter(Boolean) as string[]
+        );
+
         if (parsed.checklists && Array.isArray(parsed.checklists)) {
-          setChecklists(parsed.checklists);
           for (const chk of parsed.checklists) {
-            await SupabaseService.addChecklist(chk);
+            if (!chk) continue;
+            const chkId = chk.id ? String(chk.id) : null;
+            if (chkId && existingChkIds.has(chkId)) {
+              await SupabaseService.updateChecklist(chkId, chk);
+            } else {
+              await SupabaseService.addChecklist(chk as any);
+              if (chkId) existingChkIds.add(chkId);
+            }
           }
         }
-        if (parsed.settings) {
-          setSettings(parsed.settings);
+
+        if (parsed.settings && typeof parsed.settings === 'object') {
           await SupabaseService.updateSettings(parsed.settings);
         }
+
         await refreshFromSupabase();
         return true;
       } catch (e) {
@@ -549,7 +607,7 @@ export function useChacaraData() {
         return false;
       }
     },
-    [refreshFromSupabase]
+    [reservations, expenses, checklists, refreshFromSupabase]
   );
 
   return {

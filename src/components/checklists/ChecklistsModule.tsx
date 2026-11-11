@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Checklist, ChecklistItem, ChacaraDetails } from '../../types';
 import {
   ClipboardCheck,
@@ -42,6 +42,19 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
   const [newItemCategory, setNewItemCategory] = useState('');
   const [editingNotesItemId, setEditingNotesItemId] = useState<string | null>(null);
   const [itemNoteText, setItemNoteText] = useState('');
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  useEffect(() => {
+    setConfirmingReset(false);
+    setConfirmingDelete(false);
+  }, [selectedChecklistId]);
+
+  useEffect(() => {
+    if (checklists.length > 0 && !checklists.some((c) => c.id === selectedChecklistId)) {
+      setSelectedChecklistId(checklists[0].id);
+    }
+  }, [checklists, selectedChecklistId]);
 
   const currentChecklist =
     checklists.find((c) => c.id === selectedChecklistId) || checklists[0];
@@ -78,17 +91,22 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
     onUpdateChecklist(currentChecklist.id, { items: updated });
   };
 
-  // Reset all items to uncompleted (new rental inspection)
-  const handleResetChecklist = () => {
+  // Reset all items to uncompleted (inline confirmation)
+  const handleExecuteReset = () => {
     if (!currentChecklist) return;
-    if (
-      confirm(
-        `Deseja desmarcar todos os itens de "${currentChecklist.title}" para iniciar uma nova vistoria?`
-      )
-    ) {
-      const resetItems = currentChecklist.items.map((i) => ({ ...i, completed: false }));
-      onUpdateChecklist(currentChecklist.id, { items: resetItems });
-    }
+    const resetItems = currentChecklist.items.map((i) => ({ ...i, completed: false }));
+    onUpdateChecklist(currentChecklist.id, { items: resetItems });
+    setConfirmingReset(false);
+  };
+
+  // Delete checklist with inline confirmation and switch to next available
+  const handleExecuteDelete = () => {
+    if (!currentChecklist) return;
+    const deletedId = currentChecklist.id;
+    const remaining = checklists.filter((c) => c.id !== deletedId);
+    setSelectedChecklistId(remaining[0]?.id || '');
+    setConfirmingDelete(false);
+    onDeleteChecklist(deletedId);
   };
 
   // Mark all items as complete
@@ -218,8 +236,35 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
         </button>
       </div>
 
-      {/* Checklist Selector Pills */}
-      <div className="flex space-x-2.5 overflow-x-auto pb-2 scrollbar-none">
+      {/* Content: Empty State or Checklists View */}
+      {checklists.length === 0 ? (
+        <div className="bg-white rounded-xl border border-stone-200 p-8 sm:p-12 text-center shadow-xs space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto border border-emerald-200">
+            <ClipboardCheck className="w-7 h-7" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1">
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">
+              Nenhum checklist cadastrado
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500">
+              Crie modelos de vistoria de entrada, conferência de saída ou rotinas de manutenção para sua chácara.
+            </p>
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => setIsNewModalOpen(true)}
+              className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs sm:text-sm font-bold shadow-xs inline-flex items-center cursor-pointer transition-colors"
+            >
+              <PlusCircle className="w-4 h-4 mr-2" />
+              <span>+ Criar Novo Checklist</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Checklist Selector Pills */}
+          <div className="flex space-x-2.5 overflow-x-auto pb-2 scrollbar-none">
         {checklists.map((chk) => {
           const isSelected = chk.id === (currentChecklist ? currentChecklist.id : '');
           const total = chk.items.length;
@@ -300,15 +345,39 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
                 <span>Marcar Todos</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleResetChecklist}
-                className="px-2.5 py-1.5 text-xs font-bold text-slate-700 bg-stone-100 hover:bg-stone-200 rounded-md border border-stone-200 flex items-center cursor-pointer"
-                title="Reiniciar checklist para nova estadia"
-              >
-                <RotateCcw className="w-3.5 h-3.5 mr-1" />
-                <span>Reiniciar</span>
-              </button>
+              {/* Reset with inline confirmation */}
+              {confirmingReset ? (
+                <div className="flex items-center space-x-1.5 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-md animate-fade-in shadow-2xs">
+                  <span className="text-[11px] font-bold text-amber-900">Desmarcar tudo?</span>
+                  <button
+                    type="button"
+                    onClick={handleExecuteReset}
+                    className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-bold cursor-pointer transition-colors"
+                  >
+                    Confirmar Reinício
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingReset(false)}
+                    className="px-1.5 py-0.5 bg-white text-slate-600 hover:text-slate-900 border border-slate-200 rounded text-[11px] font-semibold cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmingReset(true);
+                    setConfirmingDelete(false);
+                  }}
+                  className="px-2.5 py-1.5 text-xs font-bold text-slate-700 bg-stone-100 hover:bg-stone-200 rounded-md border border-stone-200 flex items-center cursor-pointer transition-colors"
+                  title="Reiniciar checklist para nova estadia"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                  <span>Reiniciar</span>
+                </button>
+              )}
 
               <button
                 id="btn-generate-checklist-pdf"
@@ -321,13 +390,33 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
                 <span>Gerar PDF</span>
               </button>
 
-              {currentChecklist.type === 'custom' && (
+              {/* Delete with inline confirmation (allowed for any checklist) */}
+              {confirmingDelete ? (
+                <div className="flex items-center space-x-1.5 bg-rose-50 border border-rose-300 px-2.5 py-1 rounded-md animate-fade-in shadow-2xs">
+                  <span className="text-[11px] font-bold text-rose-900">Excluir checklist?</span>
+                  <button
+                    type="button"
+                    onClick={handleExecuteDelete}
+                    className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold cursor-pointer transition-colors"
+                  >
+                    Sim, Excluir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(false)}
+                    className="px-1.5 py-0.5 bg-white text-slate-600 hover:text-slate-900 border border-slate-200 rounded text-[11px] font-semibold cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
                   onClick={() => {
-                    onDeleteChecklist(currentChecklist.id);
+                    setConfirmingDelete(true);
+                    setConfirmingReset(false);
                   }}
-                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md border border-rose-200 cursor-pointer"
+                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md border border-rose-200 cursor-pointer transition-colors"
                   title="Excluir checklist"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -489,12 +578,15 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
           </form>
         </div>
       )}
+        </>
+      )}
 
       {/* Modal for Creating New Custom Checklist */}
       <NewChecklistModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
         onSave={onAddChecklist}
+        settings={settings}
       />
     </div>
   );

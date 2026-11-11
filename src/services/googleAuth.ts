@@ -95,13 +95,16 @@ let currentUser: User | null = initialSession.user;
 // Initialize auth state listener. Call this on app load.
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
-  onAuthFailure?: () => void
+  onAuthFailure?: () => void,
+  onUserDetectedWithoutToken?: (user: User) => void
 ) => {
   // If we already have a saved session, activate it immediately so the user doesn't have to wait or log in again
   if (cachedAccessToken && currentUser) {
     if (onAuthSuccess) {
       onAuthSuccess(currentUser, cachedAccessToken);
     }
+  } else if (currentUser && onUserDetectedWithoutToken) {
+    onUserDetectedWithoutToken(currentUser);
   }
 
   return onAuthStateChanged(auth, async (user: User | null) => {
@@ -118,12 +121,17 @@ export const initAuth = (
         persistSession(cachedAccessToken, currentUser);
         if (onAuthSuccess) onAuthSuccess(currentUser, cachedAccessToken);
       } else if (!isSigningIn) {
-        // Try silent refresh
+        if (onUserDetectedWithoutToken) {
+          onUserDetectedWithoutToken(user);
+        }
+        // Try silent refresh without treating failure as a fatal error
         trySilentTokenRefresh().then((tok) => {
           if (tok) {
+            cachedAccessToken = tok;
+            persistSession(tok, currentUser);
             if (onAuthSuccess) onAuthSuccess(currentUser!, tok);
-          } else if (!cachedAccessToken && onAuthFailure) {
-            onAuthFailure();
+          } else {
+            console.info('Usuário logado no Firebase; autorização da Google Agenda requer clique para renovação.');
           }
         });
       }
@@ -131,6 +139,8 @@ export const initAuth = (
       // If Firebase SDK does not report a user, check if we have a persisted session
       if (cachedAccessToken && currentUser) {
         if (onAuthSuccess) onAuthSuccess(currentUser, cachedAccessToken);
+      } else if (currentUser && onUserDetectedWithoutToken) {
+        onUserDetectedWithoutToken(currentUser);
       } else if (onAuthFailure) {
         onAuthFailure();
       }
@@ -186,7 +196,9 @@ const loadGisScript = (): Promise<void> => {
 /**
  * Requests an access token directly via Google Identity Services
  */
-export const requestGisAccessToken = async (promptMode: string = 'select_account'): Promise<string> => {
+export const requestGisAccessToken = async (
+  promptMode: '' | 'select_account' = 'select_account'
+): Promise<string> => {
   await loadGisScript();
   const google = (window as any).google;
   if (!google?.accounts?.oauth2) {

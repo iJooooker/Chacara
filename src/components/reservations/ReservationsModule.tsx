@@ -67,6 +67,24 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
   const [selectedForDetails, setSelectedForDetails] = useState<Reservation | null>(null);
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
 
+  // Dynamic extraction of calendar email and embed URL from settings.google_calendar_ical_url
+  const { calendarEmail, embedSrc } = useMemo(() => {
+    const rawUrl = settings?.google_calendar_ical_url || '';
+    const match = rawUrl.match(/\/calendar\/ical\/([^/]+)\//);
+    const rawId = match ? match[1] : 'claudemirjappa%40gmail.com';
+    let decoded = 'claudemirjappa@gmail.com';
+    try {
+      decoded = decodeURIComponent(rawId);
+    } catch {
+      decoded = rawId;
+    }
+    const encoded = encodeURIComponent(decoded);
+    return {
+      calendarEmail: decoded,
+      embedSrc: `https://calendar.google.com/calendar/embed?src=${encoded}&ctz=America%2FSao_Paulo`,
+    };
+  }, [settings?.google_calendar_ical_url]);
+
   const handleDirectGoogleSync = async (res: Reservation) => {
     try {
       const token = await getAccessToken();
@@ -273,7 +291,7 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
               <div className="flex items-center space-x-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                  Google Agenda Oficial (claudemirjappa@gmail.com)
+                  Google Agenda Oficial ({calendarEmail})
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -301,10 +319,15 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
               </a>
             </div>
           </div>
+
+          <div className="text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200/90 rounded-lg px-3 py-2">
+            Nota: Se a visualização embutida ficar em branco no navegador/preview por bloqueio de cookies do Google, use o botão <strong>'Abrir no Google Calendar'</strong> acima.
+          </div>
+
           <div className="w-full overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xs">
             <iframe
-              src="https://calendar.google.com/calendar/embed?src=claudemirjappa%40gmail.com&ctz=America%2FSao_Paulo"
-              title="Google Agenda Claudemir"
+              src={embedSrc}
+              title={`Google Agenda ${calendarEmail}`}
               className="w-full h-[650px] border-0"
             />
           </div>

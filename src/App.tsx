@@ -15,7 +15,12 @@ import { GoogleCalendarSyncModal } from './components/calendar/GoogleCalendarSyn
 import { Reservation, Expense } from './types';
 import { isSupabaseConfigured } from './services/supabaseClient';
 import { getAccessToken } from './services/googleAuth';
-import { pushReservationToGoogle } from './services/googleCalendarService';
+import {
+  pushReservationToGoogle,
+  removeReservationFromGoogle,
+  getStoredEventId,
+  removeStoredEventId,
+} from './services/googleCalendarService';
 import { CheckCircle2, Trees, Database, RefreshCw, HardDrive } from 'lucide-react';
 
 export default function App() {
@@ -120,8 +125,27 @@ export default function App() {
   };
 
   const handleDeleteReservation = async (id: string) => {
+    const target = reservations.find((r) => r.id === id);
+    const eventId = target?.google_calendar_event_id || getStoredEventId(id);
+
     await deleteReservation(id);
-    showToast('Locação excluída com sucesso.');
+    removeStoredEventId(id);
+
+    if (eventId) {
+      const token = await getAccessToken();
+      if (token) {
+        const removed = await removeReservationFromGoogle(eventId, token);
+        if (removed) {
+          showToast('Locação excluída do sistema e da Google Agenda!');
+        } else {
+          showToast('Locação excluída do app, mas falhou ao remover da Google Agenda.');
+        }
+      } else {
+        showToast('Locação excluída do app. (Conecte a Google Agenda se quiser remover o evento lá.)');
+      }
+    } else {
+      showToast('Locação excluída com sucesso.');
+    }
   };
 
   const handleOpenWhatsApp = (res: Reservation) => {

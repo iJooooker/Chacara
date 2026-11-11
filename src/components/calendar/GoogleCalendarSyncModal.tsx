@@ -101,13 +101,15 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
       () => {
         getAccessToken().then((tok) => {
           if (!tok) {
-            setUser(null);
             setAccessToken(null);
           } else {
             setAccessToken(tok);
             setUser(getCurrentUser());
           }
         });
+      },
+      (detectedUser) => {
+        setUser(detectedUser);
       }
     );
 
@@ -116,6 +118,11 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
       if (tok) {
         setAccessToken(tok);
         setUser(getCurrentUser());
+      } else {
+        const currentUserDetected = getCurrentUser();
+        if (currentUserDetected) {
+          setUser(currentUserDetected);
+        }
       }
     });
 
@@ -661,12 +668,37 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
                 </button>
               </div>
 
+              {/* Token renewal notice after page reload (F5) */}
+              {!accessToken && (
+                <div className="p-3.5 bg-amber-50/90 border-2 border-amber-300 rounded-xl text-xs text-amber-950 space-y-2.5 animate-fade-in shadow-2xs">
+                  <div className="flex items-center space-x-2 font-bold text-amber-900">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Permissão da Google Agenda expirou ao recarregar a página</span>
+                  </div>
+                  <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                    Sua conta está identificada como <strong>{user.email}</strong>, mas a Google exige reautorização da API ao abrir uma nova sessão para enviar eventos. Clique abaixo para reativar:
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleSignIn}
+                      disabled={isAuthenticating}
+                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs rounded-lg shadow-xs flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isAuthenticating ? 'animate-spin text-emerald-200' : 'text-white'}`} />
+                      <span>Renovar Acesso à Agenda (1 clique)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-wrap">
                 <button
                   type="button"
                   onClick={handleSyncAll}
-                  disabled={isSyncing || isCleaningDuplicates}
+                  disabled={!accessToken || isSyncing || isCleaningDuplicates}
                   className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
+                  title={!accessToken ? 'Renove o acesso à agenda acima para sincronizar' : 'Sincronizar todas as reservas'}
                 >
                   {isSyncing ? (
                     <>
@@ -684,9 +716,9 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
                 <button
                   type="button"
                   onClick={handleCleanupDuplicates}
-                  disabled={isCleaningDuplicates || isSyncing}
+                  disabled={!accessToken || isCleaningDuplicates || isSyncing}
                   className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold text-xs sm:text-sm rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
-                  title="Remove centenas de eventos repetidos da mesma data no Google Calendar"
+                  title={!accessToken ? 'Renove o acesso à agenda acima para limpar duplicatas' : 'Remove centenas de eventos repetidos da mesma data no Google Calendar'}
                 >
                   {isCleaningDuplicates ? (
                     <>
@@ -856,14 +888,14 @@ export const GoogleCalendarSyncModal: React.FC<GoogleCalendarSyncModalProps> = (
           <div className="flex items-center justify-between">
             <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center">
               <LinkIcon className="w-3.5 h-3.5 mr-1 text-slate-500" />
-              Link iCal da sua Agenda Pessoal Google (.ics)
+              Link iCal da sua Agenda Google (.ics)
             </h5>
             {savedICalSuccess && (
               <span className="text-[11px] font-semibold text-emerald-700">✓ Salvo!</span>
             )}
           </div>
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            Link privado da sua agenda Google fornecido para leitura e sincronização das datas já agendadas:
+            Este link identifica sua agenda Google no aplicativo. Devido a restrições de segurança de CORS impostas pelo Google para leitura direta de links <code>.ics</code> externos no navegador sem servidor proxy, utilize a <strong>Sincronização Direta por API</strong> acima ou o download do arquivo <code>.ics</code> para enviar e visualizar os eventos.
           </p>
           <div className="flex items-center space-x-2">
             <input

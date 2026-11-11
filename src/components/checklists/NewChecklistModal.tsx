@@ -1,23 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
-import { Checklist, ChecklistType } from '../../types';
+import { Checklist, ChecklistType, ChacaraDetails } from '../../types';
 import { ClipboardCheck, Plus, Trash2, AlertCircle } from 'lucide-react';
 
 interface NewChecklistModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: Omit<Checklist, 'id' | 'created_at' | 'updated_at'>) => void;
+  settings?: ChacaraDetails;
 }
 
 export const NewChecklistModal: React.FC<NewChecklistModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  settings,
 }) => {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<ChecklistType>('custom');
   const [description, setDescription] = useState('');
-  const [assignedTo, setAssignedTo] = useState('Seu Agenor (Caseiro)');
+  const [assignedTo, setAssignedTo] = useState(
+    settings?.caretaker_name || 'Caseiro / Administração'
+  );
   const [items, setItems] = useState<string[]>([
     'Conferência de portas e janelas',
     'Higienização dos banheiros',
@@ -25,6 +29,22 @@ export const NewChecklistModal: React.FC<NewChecklistModalProps> = ({
   ]);
   const [newItemText, setNewItemText] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setTitle('');
+      setType('custom');
+      setDescription('');
+      setAssignedTo(settings?.caretaker_name || 'Caseiro / Administração');
+      setItems([
+        'Conferência de portas e janelas',
+        'Higienização dos banheiros',
+        'Conferência de utensílios da churrasqueira',
+      ]);
+      setNewItemText('');
+      setErrorMessage('');
+    }
+  }, [isOpen, settings]);
 
   const handleAddItem = () => {
     if (!newItemText.trim()) return;
@@ -66,7 +86,7 @@ export const NewChecklistModal: React.FC<NewChecklistModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Criar Novo Modelo de Checklist"
-      subtitle="Chácara Recanto da Paz • Vistorias, Faxinas & Manutenção"
+      subtitle={`${settings?.name || 'Chácara Solaris'} • Vistorias, Faxinas & Manutenção`}
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">

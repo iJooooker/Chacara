@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { ChacaraDetails } from '../../types';
 import {
@@ -15,16 +15,17 @@ import {
   Phone,
   Database,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: ChacaraDetails;
-  onSaveSettings: (settings: ChacaraDetails) => void;
-  onResetToMock: () => void;
+  onSaveSettings: (settings: ChacaraDetails) => Promise<void> | void;
+  onResetToMock: () => Promise<void> | void;
   onExportData: () => string;
-  onImportData: (jsonStr: string) => boolean;
+  onImportData: (jsonStr: string) => Promise<boolean> | boolean;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -38,20 +39,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<ChacaraDetails>(settings);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [importStatus, setImportStatus] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  useEffect(() => {
+    setFormData(settings);
+    setSaveSuccess(false);
+    setImportStatus(null);
+    setConfirmingReset(false);
+  }, [settings, isOpen]);
 
   const handleChange = (field: keyof ChacaraDetails, val: any) => {
     setFormData((prev) => ({ ...prev, [field]: val }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveSettings(formData);
-    setSaveSuccess(true);
-    setTimeout(() => {
-      setSaveSuccess(false);
-      onClose();
-    }, 1200);
+    setIsSaving(true);
+    try {
+      await onSaveSettings(formData);
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        onClose();
+      }, 1200);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDownloadBackup = () => {
@@ -71,17 +91,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      const content = evt.target?.result as string;
-      const ok = onImportData(content);
-      if (ok) {
-        setImportStatus('Backup importado com sucesso!');
-        setTimeout(() => setImportStatus(null), 3000);
-      } else {
-        setImportStatus('Erro ao importar backup. Verifique o arquivo JSON.');
+    reader.onload = async (evt) => {
+      setIsImporting(true);
+      setImportStatus(null);
+      try {
+        const content = evt.target?.result as string;
+        const ok = await onImportData(content);
+        if (ok) {
+          setImportStatus({
+            type: 'success',
+            text: 'Backup importado e sincronizado com sucesso!',
+          });
+          setTimeout(() => setImportStatus(null), 4000);
+        } else {
+          setImportStatus({
+            type: 'error',
+            text: 'Erro ao importar backup. Verifique se o arquivo JSON é um backup válido.',
+          });
+        }
+      } catch (err) {
+        setImportStatus({
+          type: 'error',
+          text: 'Erro ao processar arquivo de backup.',
+        });
+      } finally {
+        setIsImporting(false);
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleConfirmReset = async () => {
+    setIsResetting(true);
+    try {
+      await onResetToMock();
+      setConfirmingReset(false);
+      onClose();
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   return (
@@ -257,9 +306,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               id="btn-save-settings-data"
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs sm:text-sm font-bold flex items-center shadow-sm"
+              disabled={isSaving}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs sm:text-sm font-bold flex items-center shadow-sm cursor-pointer transition-colors"
             >
-              {saveSuccess ? (
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Salvando...
+                </>
+              ) : saveSuccess ? (
                 <>
                   <Check className="w-4 h-4 mr-1.5" /> Salvo com Sucesso!
                 </>
@@ -285,8 +339,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </p>
 
           {importStatus && (
-            <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold">
-              {importStatus}
+            <div
+              className={`p-2.5 rounded-lg text-xs font-semibold flex items-center ${
+                importStatus.type === 'success'
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                  : 'bg-rose-50 border border-rose-200 text-rose-800'
+              }`}
+            >
+              {importStatus.type === 'success' ? (
+                <Check className="w-4 h-4 mr-1.5 shrink-0 text-emerald-600" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 mr-1.5 shrink-0 text-rose-600" />
+              )}
+              <span>{importStatus.text}</span>
             </div>
           )}
 
@@ -294,35 +359,85 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               type="button"
               onClick={handleDownloadBackup}
-              className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold flex items-center shadow-2xs"
+              className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold flex items-center shadow-2xs cursor-pointer transition-colors"
             >
               <Download className="w-4 h-4 mr-1.5 text-emerald-700" />
               <span>Exportar Backup JSON</span>
             </button>
 
-            <label className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold flex items-center shadow-2xs cursor-pointer">
-              <Upload className="w-4 h-4 mr-1.5 text-blue-700" />
-              <span>Importar Backup JSON</span>
+            <label
+              className={`px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold flex items-center shadow-2xs cursor-pointer transition-colors ${
+                isImporting ? 'opacity-60 pointer-events-none' : ''
+              }`}
+            >
+              {isImporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1.5 text-blue-700 animate-spin" />
+                  <span>Importando Backup...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-1.5 text-blue-700" />
+                  <span>Importar Backup JSON</span>
+                </>
+              )}
               <input
                 type="file"
                 accept=".json"
                 onChange={handleFileUpload}
+                disabled={isImporting}
                 className="hidden"
               />
             </label>
 
-            <button
-              type="button"
-              onClick={() => {
-                onResetToMock();
-                onClose();
-              }}
-              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold flex items-center ml-auto"
-            >
-              <RotateCcw className="w-4 h-4 mr-1.5" />
-              <span>Restaurar Dados Padrão</span>
-            </button>
+            {!confirmingReset && (
+              <button
+                type="button"
+                onClick={() => setConfirmingReset(true)}
+                className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold flex items-center ml-auto cursor-pointer transition-colors"
+              >
+                <RotateCcw className="w-4 h-4 mr-1.5" />
+                <span>Restaurar Dados Padrão</span>
+              </button>
+            )}
           </div>
+
+          {/* Inline confirmation for reset to mock */}
+          {confirmingReset && (
+            <div className="mt-3 p-3.5 bg-rose-50 border border-rose-300 rounded-xl space-y-2.5 shadow-2xs">
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
+                <p className="text-xs font-semibold text-rose-900 leading-relaxed">
+                  Atenção: isso apagará suas reservas, despesas e checklists atuais no banco e voltará aos dados de exemplo. Confirmar?
+                </p>
+              </div>
+              <div className="flex items-center justify-end space-x-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingReset(false)}
+                  disabled={isResetting}
+                  className="px-3 py-1.5 bg-white text-slate-700 hover:text-slate-900 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmReset}
+                  disabled={isResetting}
+                  className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-2xs flex items-center"
+                >
+                  {isResetting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      <span>Restaurando...</span>
+                    </>
+                  ) : (
+                    <span>Confirmar Restauração</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </Modal>
