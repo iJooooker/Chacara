@@ -1,1 +1,44 @@
 @import "tailwindcss";
+
+@theme {
+  --color-emerald-50: #F4F7F1;
+  --color-emerald-100: #E5ECE0;
+  --color-emerald-200: #CFD9C6;
+  --color-emerald-300: #B7C7AD;
+  --color-emerald-400: #9BB08E;
+  --color-emerald-500: #738566;
+  --color-emerald-600: #56634B;
+  --color-emerald-700: #44503B;
+  --color-emerald-800: #353F2E;
+  --color-emerald-900: #283022;
+  --color-emerald-950: #1E251A;
+
+  --color-teal-50: #FBF5EF;
+  --color-teal-100: #F6ECE0;
+  --color-teal-200: #EBD6C3;
+  --color-teal-300: #D9B69B;
+  --color-teal-400: #C4977B;
+  --color-teal-500: #AE8A75;
+  --color-teal-600: #936B53;
+  --color-teal-700: #7A5641;
+  --color-teal-800: #624332;
+  --color-teal-900: #4C3325;
+  --color-teal-950: #332117;
+
+  --color-amber-50: #FCF8F3;
+  --color-amber-100: #F6ECE0;
+  --color-amber-200: #EAD5C0;
+  --color-amber-300: #D7B497;
+  --color-amber-400: #C39373;
+  --color-amber-500: #AE8A75;
+  --color-amber-600: #9A6648;
+  --color-amber-700: #7F5036;
+  --color-amber-800: #643E29;
+  --color-amber-900: #4C2F1F;
+  --color-amber-950: #321E14;
+
+  --color-stone-50: #FAF9F7;
+  --color-stone-100: #F3EFEA;
+  --color-stone-200: #E6DFD6;
+  --color-stone-300: #D4C9BC;
+}

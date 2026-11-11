@@ -184,20 +184,20 @@ export const MonthlyRevenueChart: React.FC<MonthlyRevenueChartProps> = ({ reserv
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-slate-400 flex items-center">
-                <span className="w-2.5 h-2.5 rounded-xs bg-emerald-500 mr-1.5 inline-block" />
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#56634B] mr-1.5 inline-block" />
                 Valor Recebido:
               </span>
-              <span className="font-bold text-emerald-400 font-mono">
+              <span className="font-bold text-[#B7C7AD] font-mono">
                 {formatCurrency(currentItem?.recebido || 0)}
               </span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-slate-400 flex items-center">
-                <span className="w-2.5 h-2.5 rounded-xs bg-amber-500 mr-1.5 inline-block" />
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#AE8A75] mr-1.5 inline-block" />
                 A Receber (Pendente):
               </span>
-              <span className="font-bold text-amber-400 font-mono">
+              <span className="font-bold text-[#D9B69B] font-mono">
                 {formatCurrency(currentItem?.pendente || 0)}
               </span>
             </div>
@@ -397,7 +397,7 @@ export const MonthlyRevenueChart: React.FC<MonthlyRevenueChartProps> = ({ reserv
             <Bar
               dataKey="recebido"
               name="recebido"
-              fill="#059669"
+              fill="#56634B"
               stackId={chartMode === 'stacked' ? 'a' : undefined}
               radius={chartMode === 'stacked' ? [0, 0, 0, 0] : [4, 4, 0, 0]}
               maxBarSize={45}
@@ -405,7 +405,7 @@ export const MonthlyRevenueChart: React.FC<MonthlyRevenueChartProps> = ({ reserv
             <Bar
               dataKey="pendente"
               name="pendente"
-              fill="#f59e0b"
+              fill="#AE8A75"
               stackId={chartMode === 'stacked' ? 'a' : undefined}
               radius={[4, 4, 0, 0]}
               maxBarSize={45}
@@ -417,18 +417,18 @@ export const MonthlyRevenueChart: React.FC<MonthlyRevenueChartProps> = ({ reserv
       {/* Chart Footer note */}
       <div className="pt-2 border-t border-stone-100 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
         <div className="flex items-center space-x-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+          <Sparkles className="w-3.5 h-3.5 text-[#56634B]" />
           <span>
             Os valores são calculados com base nas datas de check-in de todas as reservas ativas.
           </span>
         </div>
         <div className="flex items-center space-x-3 text-[11px]">
           <span className="flex items-center">
-            <span className="w-2.5 h-2.5 rounded-xs bg-emerald-600 mr-1 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-xs bg-[#56634B] mr-1 inline-block" />
             Recebido (Sinal ou Quitado)
           </span>
           <span className="flex items-center">
-            <span className="w-2.5 h-2.5 rounded-xs bg-amber-500 mr-1 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-xs bg-[#AE8A75] mr-1 inline-block" />
             Pendente (Restante a Pagar)
           </span>
         </div>

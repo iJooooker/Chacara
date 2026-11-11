@@ -22,7 +22,7 @@ import {
   removeStoredEventId,
 } from './services/googleCalendarService';
 import { getLocalDateString } from './utils/formatters';
-import { CheckCircle2, Trees, Database, RefreshCw, HardDrive } from 'lucide-react';
+import { CheckCircle2, Database, RefreshCw, HardDrive } from 'lucide-react';
 
 export default function App() {
   const {
@@ -181,11 +181,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-stone-50 text-slate-900 font-sans selection:bg-emerald-700 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#FAF9F7] text-[#2B3325] font-sans selection:bg-[#56634B] selection:text-white">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-2xl border border-slate-800 flex items-center space-x-2 text-xs sm:text-sm font-semibold animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1E251A] text-white px-4 py-3 rounded-lg shadow-2xl border border-[#353F2E] flex items-center space-x-2 text-xs sm:text-sm font-semibold animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 text-[#9BB08E]" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -273,11 +273,11 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-stone-200 bg-white py-5 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
+      <footer className="border-t border-[#E6DFD6] bg-white/80 py-5 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-[#56634B] gap-3">
           <div className="flex items-center space-x-2">
-            <Trees className="w-4 h-4 text-emerald-800" />
-            <span className="font-bold text-slate-800">{settings.name}</span>
+            <img src="/logo-solaris.png" alt={settings.name} className="w-5 h-5 rounded-full object-cover border border-[#A4836E]/60 shadow-2xs" />
+            <span className="font-bold text-[#2B3325]">{settings.name}</span>
             <span>• Gestão de Locação por Temporada & Manutenções</span>
           </div>
           <div className="flex items-center space-x-2">

@@ -142,34 +142,41 @@ export const ChecklistsModule: React.FC<ChecklistsModuleProps> = ({
         <meta charset="UTF-8">
         <title>${checklist.title} - ${settings.name || 'Chácara Solaris'}</title>
         <style>
-          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 32px; color: #1f2937; margin: 0; }
-          .header { border-bottom: 2px solid #059669; padding-bottom: 16px; margin-bottom: 24px; }
-          .title { font-size: 24px; font-weight: bold; color: #065f46; margin: 0; }
-          .subtitle { font-size: 14px; color: #6b7280; margin-top: 4px; }
-          .meta { display: flex; justify-content: space-between; margin-top: 12px; font-size: 13px; background: #f0fdf4; padding: 10px 14px; border-radius: 6px; border: 1px solid #d1fae5; }
+          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 32px; color: #2B3325; margin: 0; background: #FAF9F7; }
+          .header { border-bottom: 2px solid #56634B; padding-bottom: 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+          .header-left { display: flex; align-items: center; gap: 16px; }
+          .logo-img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid #A4836E; }
+          .title { font-size: 24px; font-weight: bold; color: #283022; margin: 0; }
+          .subtitle { font-size: 14px; color: #56634B; margin-top: 4px; }
+          .meta { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 13px; background: #F4F7F1; padding: 10px 14px; border-radius: 6px; border: 1px solid #CFD9C6; color: #283022; }
           .items-list { list-style: none; padding: 0; margin-top: 20px; }
-          .item { display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+          .item { display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #E6DFD6; }
           .status-badge { font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 4px; margin-right: 12px; min-width: 90px; text-align: center; display: inline-block; }
-          .completed { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+          .completed { background: #CFD9C6; color: #283022; border: 1px solid #B7C7AD; }
           .pending { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
           .item-text { font-size: 14px; font-weight: 500; color: #111827; }
-          .item-notes { font-size: 12px; color: #059669; margin-top: 4px; font-style: italic; }
-          .category-tag { font-size: 11px; background: #f3f4f6; color: #4b5563; padding: 2px 6px; border-radius: 4px; margin-left: 8px; font-weight: normal; }
+          .item-notes { font-size: 12px; color: #56634B; margin-top: 4px; font-style: italic; }
+          .category-tag { font-size: 11px; background: #F3EFEA; color: #56634B; padding: 2px 6px; border-radius: 4px; margin-left: 8px; font-weight: normal; }
           .signatures { margin-top: 48px; display: flex; justify-content: space-between; gap: 40px; page-break-inside: avoid; }
-          .sig-box { flex: 1; border-top: 1px solid #9ca3af; padding-top: 8px; text-align: center; font-size: 12px; color: #4b5563; }
-          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 12px; }
-          @media print { body { padding: 0; } }
+          .sig-box { flex: 1; border-top: 1px solid #AE8A75; padding-top: 8px; text-align: center; font-size: 12px; color: #56634B; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #AE8A75; border-top: 1px solid #E6DFD6; padding-top: 12px; }
+          @media print { body { padding: 0; background: #fff; } }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1 class="title">${settings.name || 'Chácara Solaris'}</h1>
-          <div class="subtitle">${checklist.title} ${checklist.description ? ` - ${checklist.description}` : ''}</div>
-          <div class="meta">
-            <span><strong>Responsável:</strong> ${checklist.assigned_to || 'Não informado'}</span>
-            <span><strong>Progresso:</strong> ${completed}/${total} (${percent}%)</span>
-            <span><strong>Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')}</span>
+          <div class="header-left">
+            <img src="/logo-solaris.png" alt="Logo" class="logo-img" />
+            <div>
+              <h1 class="title">${settings.name || 'Chácara Solaris'}</h1>
+              <div class="subtitle">${checklist.title} ${checklist.description ? ` - ${checklist.description}` : ''}</div>
+            </div>
           </div>
+        </div>
+        <div class="meta">
+          <span><strong>Responsável:</strong> ${checklist.assigned_to || 'Não informado'}</span>
+          <span><strong>Progresso:</strong> ${completed}/${total} (${percent}%)</span>
+          <span><strong>Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')}</span>
         </div>
         <ul class="items-list">
           ${checklist.items

@@ -12,6 +12,7 @@ import {
   formatPhone,
   PAYMENT_STATUS_CONFIG,
   RESERVATION_STATUS_CONFIG,
+  getLocalDateString,
 } from '../../utils/formatters';
 import {
   Calendar,
@@ -32,6 +33,8 @@ import {
   ExternalLink,
   CalendarCheck,
   Loader2,
+  AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { CalendarGrid } from './CalendarGrid';
 import { pushReservationToGoogle } from '../../services/googleCalendarService';
@@ -112,6 +115,44 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
     () => reservations.filter((r) => r.status !== 'cancelled'),
     [reservations]
   );
+
+  // Operational Preparation Alert: reservations with check-in in the next 5 days
+  const { upcomingPreparations, currentHostedReservation } = useMemo(() => {
+    const todayStr = getLocalDateString();
+    const [tY, tM, tD] = todayStr.split('-').map(Number);
+    const todayDate = new Date(tY, tM - 1, tD);
+
+    const upcoming: (Reservation & { diffDays: number })[] = [];
+    let currentHosted: Reservation | null = null;
+
+    for (const res of reservations) {
+      if (res.status === 'cancelled' || res.status === 'completed') {
+        continue;
+      }
+
+      // Check for currently hosted guest
+      if (res.check_in < todayStr && res.check_out >= todayStr) {
+        if (!currentHosted || res.check_out > currentHosted.check_out) {
+          currentHosted = res;
+        }
+      }
+
+      const [cY, cM, cD] = res.check_in.split('-').map(Number);
+      const checkInDate = new Date(cY, cM - 1, cD);
+      const diffDays = Math.round((checkInDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDays >= 0 && diffDays <= 5) {
+        upcoming.push({ ...res, diffDays });
+      }
+    }
+
+    upcoming.sort((a, b) => {
+      if (a.diffDays !== b.diffDays) return a.diffDays - b.diffDays;
+      return a.client_name.localeCompare(b.client_name);
+    });
+
+    return { upcomingPreparations: upcoming, currentHostedReservation: currentHosted };
+  }, [reservations]);
 
   const totalAgreed = activeReservations.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
   const totalPaid = activeReservations.reduce((acc, curr) => acc + (curr.amount_paid || 0), 0);
@@ -236,6 +277,132 @@ export const ReservationsModule: React.FC<ReservationsModuleProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Preparation Alert Banner */}
+      {upcomingPreparations.length > 0 && (() => {
+        const nextReservation = upcomingPreparations[0];
+        const nextDiff = nextReservation.diffDays;
+        const countdownTitle =
+          nextDiff === 0
+            ? 'Próxima reserva começa HOJE!'
+            : nextDiff === 1
+            ? 'Próxima reserva é AMANHÃ (em 1 dia)!'
+            : `Próxima reserva em ${nextDiff} dias`;
+        const isUrgent = nextDiff <= 1;
+
+        return (
+          <div
+            id="preparation-alert-banner"
+            className={`p-4 rounded-xl border shadow-sm transition-all ${
+              isUrgent
+                ? 'bg-rose-50 border-rose-300 text-rose-950'
+                : 'bg-amber-50 border-amber-300 text-amber-950'
+            }`}
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div
+                  className={`p-2.5 rounded-lg shrink-0 mt-0.5 ${
+                    isUrgent ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {isUrgent ? (
+                    <AlertTriangle className="w-6 h-6 animate-pulse" />
+                  ) : (
+                    <Sparkles className="w-6 h-6" />
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider ${
+                        isUrgent
+                          ? 'bg-rose-600 text-white'
+                          : 'bg-amber-600 text-white'
+                      }`}
+                    >
+                      {isUrgent ? 'URGENTE' : 'Preparação da Chácara'}
+                    </span>
+                    <h3 className="text-base font-extrabold tracking-tight">
+                      {countdownTitle}
+                    </h3>
+                    {currentHostedReservation && currentHostedReservation.id !== nextReservation.id && (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-stone-200/80 text-stone-700 border border-stone-300">
+                        Hóspede atual até {formatDate(currentHostedReservation.check_out)}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs sm:text-sm font-medium opacity-90 leading-relaxed">
+                    Hora de ir à chácara aplicar produtos na piscina, limpar e conferir tudo para a chegada de{' '}
+                    <strong className="font-bold underline decoration-dotted">{nextReservation.client_name}</strong>.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-90 pt-1">
+                    <span className="flex items-center gap-1 font-semibold">
+                      <Clock className="w-3.5 h-3.5" />
+                      Entrada: {formatDate(nextReservation.check_in)} às {settings.check_in_time || '08:00'}
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Saída: {formatDate(nextReservation.check_out)} às {settings.check_out_time || '18:00'}
+                    </span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" />
+                      {nextReservation.guests_count} hóspede{nextReservation.guests_count !== 1 ? 's' : ''}
+                    </span>
+                    <span>•</span>
+                    <span className="font-semibold">
+                      {nextReservation.payment_status === 'paid' ? (
+                        <span className="text-emerald-700 font-bold">100% Quitado</span>
+                      ) : nextReservation.remaining_amount > 0 ? (
+                        <span className={isUrgent ? 'text-rose-800 font-bold' : 'text-amber-800 font-bold'}>
+                          Saldo pendente: {formatCurrency(nextReservation.remaining_amount)}
+                        </span>
+                      ) : (
+                        <span>{PAYMENT_STATUS_CONFIG[nextReservation.payment_status]?.label}</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {upcomingPreparations.length > 1 && (
+                    <p className="text-[11px] font-semibold text-slate-600 pt-0.5">
+                      + {upcomingPreparations.length - 1} outra(s) entrada(s) nos próximos 5 dias
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onOpenWhatsApp(nextReservation)}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title={`Conversar com ${nextReservation.client_name} no WhatsApp`}
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>WhatsApp</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onEditReservation(nextReservation)}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg border shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    isUrgent
+                      ? 'bg-white hover:bg-rose-100/70 text-rose-950 border-rose-300'
+                      : 'bg-white hover:bg-amber-100/70 text-amber-950 border-amber-300'
+                  }`}
+                  title="Ver detalhes da reserva"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Ver Reserva</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Mini Financial Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
